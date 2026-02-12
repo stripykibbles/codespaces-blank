@@ -89,9 +89,6 @@ st.markdown("""
         overflow: hidden;
         text-align: center;
         padding: 0px;
-        &p {
-            text-align: center;
-        }
     }
     div [data-testid="stVerticalBlock"] {
         align-items: center;
@@ -399,7 +396,7 @@ def dialog_settings():
 
 def sidebar():
     print("sidebar")
-    st.write(f"<div style='line-height: 1.25;'><p style='margin-bottom: 0px;'>You've submitted {get_words()}</p></div>",unsafe_allow_html=True)
+    st.write(f"<div style='line-height: 1.25; text-align:center;'><p style='margin-bottom: 0px;'>You've submitted {get_words()}</p></div>",unsafe_allow_html=True)
 
     if st.button(label="Submit & Clear Text Area", key="dialog_submit", width="stretch"):
         if st.session_state["novel_exe"]:
