@@ -87,8 +87,11 @@ st.markdown("""
     }
     div [data-testid="stSidebarContent"] {
         overflow: hidden;
-        text-align: center !important;
+        text-align: center;
         padding: 0px;
+        &p {
+            text-align: center;
+        }
     }
     div [data-testid="stVerticalBlock"] {
         align-items: center;
