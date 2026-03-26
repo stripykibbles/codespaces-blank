@@ -2,7 +2,7 @@ name: Build Typewriter App
 
 on:
   push:
-    branches: [ main ]
+    branches: [ 2.0 ]
   workflow_dispatch:  # allows you to trigger the build manually from GitHub
 
 jobs:
