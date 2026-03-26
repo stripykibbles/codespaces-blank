@@ -1,0 +1,63 @@
+name: Build Typewriter App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # allows you to trigger the build manually from GitHub
+
+jobs:
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install PySide6 pyinstaller
+
+      - name: Build app
+        run: |
+          pyinstaller typewriter.spec
+
+      - name: Zip the .app bundle
+        run: |
+          cd dist
+          zip -r Typewriter-Mac.zip Typewriter.app
+
+      - name: Upload Mac build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Typewriter-Mac
+          path: dist/Typewriter-Mac.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install PySide6 pyinstaller
+
+      - name: Build app
+        run: |
+          pyinstaller typewriter.spec
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Typewriter-Windows
+          path: dist/Typewriter.exe
