@@ -1,751 +1,205 @@
-import sys
-import io
-import csv
-import os
-import re
-from datetime import datetime
-
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QTextEdit, QLabel, QDialog, QComboBox, QFileDialog,
-    QSizePolicy, QFrame, QScrollArea, QMessageBox
-)
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QFont, QFontDatabase, QCloseEvent
-
-
-# ── Constants ────────────────────────────────────────────────────────────────
-
-FIELDNAMES = ["date", "time", "entry", "entry_word_count", "summary"]
-CSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "novel.csv")
-TXT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "novel.txt")
-
-FONT_OPTIONS = {
-    "Sans Serif":  {"family": "Atkinson Hyperlegible",  "size": 14},
-    "Serif":       {"family": "Crimson Text",            "size": 15},
-    "Monospace":   {"family": "Courier Prime",           "size": 13},
-}
-
-# Neutral light palette matching the original Streamlit aesthetic
-PALETTE = {
-    "bg":           "#ffffff",
-    "sidebar_bg":   "#f8f8f8",
-    "border":       "#e4e4e4",
-    "btn_bg":       "#ebebeb",
-    "btn_hover":    "#dbdbdb",
-    "btn_pressed":  "#cccccc",
-    "muted":        "#75767d",
-    "text":         "#1a1a1a",
-    "placeholder":  "#aaaaaa",
-    "toast_bg":     "#e4e4e4",
-}
-
-SIDEBAR_WIDTH = 220
-WINDOW_MIN_W  = 860
-WINDOW_MIN_H  = 580
-
-
-# ── Pure logic (unchanged from original) ─────────────────────────────────────
-
-def get_characters(entry: str) -> int:
-    chars = round(len(entry) / 3)
-    return max(chars, 50)
-
-
-def date_parse(t) -> tuple[str, str]:
-    matched = re.match(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}).*$", str(t))
-    if matched:
-        return matched.group(1), matched.group(2)
-    raise ValueError("Datetime not in expected format")
-
-
-def date_format(d: str) -> str:
-    date = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", d)
-    if not date:
-        raise ValueError("Date not in expected format")
-    months = {
-        "01": "January",  "02": "February", "03": "March",
-        "04": "April",    "05": "May",       "06": "June",
-        "07": "July",     "08": "August",    "09": "September",
-        "10": "October",  "11": "November",  "12": "December",
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Typewriter Feature Tracker</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff;
+    --bg-secondary: #f5f5f3;
+    --bg-tertiary: #efefed;
+    --text: #1a1a1a;
+    --text-secondary: #75767d;
+    --text-tertiary: #aaaaaa;
+    --border: rgba(0,0,0,0.1);
+    --border-secondary: rgba(0,0,0,0.18);
+    --radius-md: 8px;
+    --radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1c;
+      --bg-secondary: #242424;
+      --bg-tertiary: #2e2e2e;
+      --text: #f0f0ee;
+      --text-secondary: #999990;
+      --text-tertiary: #666660;
+      --border: rgba(255,255,255,0.1);
+      --border-secondary: rgba(255,255,255,0.18);
     }
-    month = months[date.group(2)]
-    day   = date.group(3).lstrip("0")
-    return f"{month} {day}, {date.group(1)}"
-
-
-def get_word_count() -> int:
-    count = 0
-    try:
-        with open(CSV_PATH, "r", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                count += int(row["entry_word_count"])
-    except FileNotFoundError:
-        pass
-    return count
-
-
-def submit_entry(entry: str, summary: str):
-    date, time = date_parse(datetime.now())
-    word_count  = len(entry.split())
-    row = {"date": date, "time": time, "entry": entry,
-           "entry_word_count": word_count, "summary": summary}
-    new_file = not os.path.exists(CSV_PATH)
-    with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        if new_file:
-            writer.writeheader()
-        writer.writerow(row)
-
-
-def export_text() -> str:
-    novel = ""
-    with open(CSV_PATH, "r", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            novel += row["entry"] + "\n\n"
-    with open(TXT_PATH, "w", encoding="utf-8") as f:
-        f.write(novel)
-    return novel
-
-
-def load_summaries() -> list[tuple[str, str]]:
-    """Return list of (formatted_date, summary) in reverse chronological order."""
-    rows = []
-    with open(CSV_PATH, "r", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            rows.append((row["date"], row["time"], row["summary"]))
-    rows.sort(key=lambda r: (r[0], r[1]), reverse=True)
-    return [(date_format(d), s) for d, t, s in rows]
-
-
-def import_csv_file(path: str) -> str | None:
-    """Import a CSV file. Returns error string or None on success."""
-    with open(path, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        if reader.fieldnames is None or list(reader.fieldnames) != FIELDNAMES:
-            return "CSV file is not in a valid format."
-        rows = list(reader)
-
-    new_file = not os.path.exists(CSV_PATH)
-    with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        if new_file:
-            writer.writeheader()
-        writer.writerows(rows)
-    return None
-
-
-# ── Stylesheet helpers ────────────────────────────────────────────────────────
-
-def base_stylesheet(font_family: str, font_size: int) -> str:
-    p = PALETTE
-    return f"""
-    QMainWindow, QWidget#central, QWidget#mainArea {{
-        background-color: {p['bg']};
-    }}
-    QWidget#sidebar {{
-        background-color: {p['sidebar_bg']};
-        border-right: 1px solid {p['border']};
-    }}
-    QTextEdit#editor {{
-        background-color: {p['bg']};
-        color: {p['text']};
-        border: none;
-        font-family: "{font_family}";
-        font-size: {font_size}pt;
-        padding: 8px 4px;
-        selection-background-color: {p['border']};
-    }}
-    QPushButton.sidebar-btn {{
-        background-color: {p['btn_bg']};
-        color: {p['text']};
-        border: none;
-        border-radius: 4px;
-        padding: 7px 12px;
-        font-family: "{font_family}";
-        font-size: {font_size - 1}pt;
-        text-align: center;
-    }}
-    QPushButton.sidebar-btn:hover  {{ background-color: {p['btn_hover']}; }}
-    QPushButton.sidebar-btn:pressed {{ background-color: {p['btn_pressed']}; }}
-    QLabel#wordCountLabel {{
-        color: {p['text']};
-        font-family: "{font_family}";
-        font-size: {font_size - 1}pt;
-        line-height: 1.4;
-    }}
-    QLabel#muted {{
-        color: {p['muted']};
-        font-family: "{font_family}";
-        font-size: {font_size - 2}pt;
-    }}
-    QDialog {{
-        background-color: {p['bg']};
-    }}
-    QLabel.dialog-body {{
-        color: {p['text']};
-        font-family: "{font_family}";
-        font-size: {font_size - 1}pt;
-    }}
-    QTextEdit.dialog-input {{
-        background-color: {p['bg']};
-        color: {p['text']};
-        border: 1px solid {p['border']};
-        border-radius: 4px;
-        font-family: "{font_family}";
-        font-size: {font_size - 1}pt;
-        padding: 6px;
-    }}
-    QPushButton.dialog-btn {{
-        background-color: {p['btn_bg']};
-        color: {p['text']};
-        border: none;
-        border-radius: 4px;
-        padding: 6px 16px;
-        font-family: "{font_family}";
-        font-size: {font_size - 1}pt;
-    }}
-    QPushButton.dialog-btn:hover   {{ background-color: {p['btn_hover']}; }}
-    QPushButton.dialog-btn:pressed {{ background-color: {p['btn_pressed']}; }}
-    QComboBox {{
-        background-color: {p['btn_bg']};
-        color: {p['text']};
-        border: 1px solid {p['border']};
-        border-radius: 4px;
-        padding: 5px 10px;
-        font-family: "{font_family}";
-        font-size: {font_size - 1}pt;
-    }}
-    QComboBox::drop-down {{ border: none; }}
-    QScrollArea, QScrollArea > QWidget > QWidget {{
-        background-color: {p['bg']};
-        border: none;
-    }}
-    QScrollBar:vertical {{
-        background: {p['bg']};
-        width: 8px;
-        border-radius: 4px;
-    }}
-    QScrollBar::handle:vertical {{
-        background: {p['border']};
-        border-radius: 4px;
-        min-height: 20px;
-    }}
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-    """
-
-
-# ── Dialogs ───────────────────────────────────────────────────────────────────
-
-class SummaryDialog(QDialog):
-    """Shows all entry summaries in reverse chronological order."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Summary")
-        self.setMinimumSize(460, 380)
-        self.setModal(True)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        inner = QWidget()
-        inner_layout = QVBoxLayout(inner)
-        inner_layout.setContentsMargins(4, 4, 8, 4)
-        inner_layout.setSpacing(0)
-
-        try:
-            entries = load_summaries()
-        except FileNotFoundError:
-            entries = []
-
-        if not entries:
-            lbl = QLabel("A summary of your novel will go here!")
-            lbl.setProperty("class", "dialog-body")
-            lbl.setWordWrap(True)
-            inner_layout.addWidget(lbl)
-        else:
-            for fmt_date, summary_text in entries:
-                # Date chip
-                date_lbl = QLabel(fmt_date)
-                date_lbl.setObjectName("muted")
-                date_lbl.setStyleSheet(
-                    f"background-color: {PALETTE['border']}; "
-                    f"color: {PALETTE['muted']}; "
-                    "padding: 2px 8px; "
-                    "font-size: 10pt;"
-                )
-                inner_layout.addWidget(date_lbl)
-
-                # Summary text with left border
-                summary_frame = QFrame()
-                summary_frame.setStyleSheet(
-                    f"border-left: 2px solid {PALETTE['border']}; "
-                    "margin-bottom: 12px;"
-                )
-                sf_layout = QVBoxLayout(summary_frame)
-                sf_layout.setContentsMargins(10, 5, 0, 10)
-                body = QLabel(summary_text if summary_text else "<i>No summary submitted.</i>")
-                body.setProperty("class", "dialog-body")
-                body.setWordWrap(True)
-                body.setTextFormat(Qt.RichText)
-                sf_layout.addWidget(body)
-                inner_layout.addWidget(summary_frame)
-
-        inner_layout.addStretch()
-        scroll.setWidget(inner)
-        layout.addWidget(scroll)
-
-        close_btn = QPushButton("Close")
-        close_btn.setProperty("class", "dialog-btn")
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn, alignment=Qt.AlignRight)
-
-
-class AddSummaryDialog(QDialog):
-    """Prompts user to enter a summary before submitting an entry."""
-
-    def __init__(self, entry: str, parent=None):
-        super().__init__(parent)
-        self.entry   = entry
-        self.summary = ""
-        self.setWindowTitle("Add Summary")
-        self.setMinimumSize(460, 260)
-        self.setModal(True)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-
-        hint = QLabel(
-            "Jot down some notes for future reference. "
-            "(Or not – that's okay, too!) "
-            "The character limit is determined by the length of your entry."
-        )
-        hint.setProperty("class", "dialog-body")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-
-        self.text_edit = QTextEdit()
-        self.text_edit.setProperty("class", "dialog-input")
-        self.text_edit.setFixedHeight(100)
-        self.text_edit.textChanged.connect(self._enforce_limit)
-        layout.addWidget(self.text_edit)
-
-        self._char_limit = get_characters(entry)
-        self.char_count_lbl = QLabel(f"0 / {self._char_limit} characters")
-        self.char_count_lbl.setObjectName("muted")
-        layout.addWidget(self.char_count_lbl)
-
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setProperty("class", "dialog-btn")
-        cancel_btn.clicked.connect(self.reject)
-        submit_btn = QPushButton("Submit")
-        submit_btn.setProperty("class", "dialog-btn")
-        submit_btn.clicked.connect(self._on_submit)
-        btn_row.addWidget(cancel_btn)
-        btn_row.addWidget(submit_btn)
-        layout.addLayout(btn_row)
-
-    def _enforce_limit(self):
-        text = self.text_edit.toPlainText()
-        if len(text) > self._char_limit:
-            cursor = self.text_edit.textCursor()
-            pos    = cursor.position()
-            self.text_edit.blockSignals(True)
-            self.text_edit.setPlainText(text[: self._char_limit])
-            cursor.setPosition(min(pos, self._char_limit))
-            self.text_edit.setTextCursor(cursor)
-            self.text_edit.blockSignals(False)
-            text = self.text_edit.toPlainText()
-        self.char_count_lbl.setText(f"{len(text)} / {self._char_limit} characters")
-
-    def _on_submit(self):
-        self.summary = self.text_edit.toPlainText()
-        self.accept()
-
-
-class SettingsDialog(QDialog):
-    """Font picker."""
-
-    def __init__(self, current_font: str, parent=None):
-        super().__init__(parent)
-        self.chosen_font = current_font
-        self.setWindowTitle("Settings")
-        self.setFixedSize(300, 140)
-        self.setModal(True)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-
-        lbl = QLabel("Select a font")
-        lbl.setProperty("class", "dialog-body")
-        layout.addWidget(lbl)
-
-        self.combo = QComboBox()
-        for name in FONT_OPTIONS:
-            self.combo.addItem(name)
-        self.combo.setCurrentText(current_font)
-        layout.addWidget(self.combo)
-
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        save_btn = QPushButton("Save & Close")
-        save_btn.setProperty("class", "dialog-btn")
-        save_btn.clicked.connect(self._save)
-        btn_row.addWidget(save_btn)
-        layout.addLayout(btn_row)
-
-    def _save(self):
-        self.chosen_font = self.combo.currentText()
-        self.accept()
-
-
-class ExportDialog(QDialog):
-    """Export TXT or CSV."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Export Work")
-        self.setFixedSize(280, 130)
-        self.setModal(True)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-
-        txt_btn = QPushButton("Export Text (.txt)")
-        txt_btn.setProperty("class", "dialog-btn")
-        txt_btn.clicked.connect(self._export_txt)
-
-        csv_btn = QPushButton("Export Raw Data (.csv)")
-        csv_btn.setProperty("class", "dialog-btn")
-        csv_btn.clicked.connect(self._export_csv)
-
-        layout.addWidget(txt_btn)
-        layout.addWidget(csv_btn)
-
-        close_btn = QPushButton("Close")
-        close_btn.setProperty("class", "dialog-btn")
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn, alignment=Qt.AlignRight)
-
-    def _export_txt(self):
-        dest, _ = QFileDialog.getSaveFileName(self, "Save Text File", "novel.txt", "Text Files (*.txt)")
-        if dest:
-            text = export_text()
-            with open(dest, "w", encoding="utf-8") as f:
-                f.write(text)
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Exported")
-            msg.setText(f"Text saved to:\n{dest}")
-            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
-            msg.exec()
-
-    def _export_csv(self):
-        dest, _ = QFileDialog.getSaveFileName(self, "Save CSV File", "novel.csv", "CSV Files (*.csv)")
-        if dest:
-            import shutil
-            shutil.copy2(CSV_PATH, dest)
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Exported")
-            msg.setText(f"CSV saved to:\n{dest}")
-            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
-            msg.exec()
-
-
-class ImportDialog(QDialog):
-    """Import TXT or CSV."""
-
-    def __init__(self, has_existing_content: bool, parent=None):
-        super().__init__(parent)
-        self.imported_text = None   # set if TXT imported
-        self.imported_csv  = False  # set True if CSV imported successfully
-        self.setWindowTitle("Import Work")
-        self.setFixedSize(320, 150)
-        self.setModal(True)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-
-        if has_existing_content:
-            warn = QLabel("⚠ Importing will overwrite your current entry.")
-            warn.setStyleSheet(f"color: {PALETTE['muted']}; font-size: 10pt;")
-            warn.setWordWrap(True)
-            layout.addWidget(warn)
-
-        txt_btn = QPushButton("Import Text File (.txt)")
-        txt_btn.setProperty("class", "dialog-btn")
-        txt_btn.clicked.connect(self._import_txt)
-
-        csv_btn = QPushButton("Import CSV File (.csv)")
-        csv_btn.setProperty("class", "dialog-btn")
-        csv_btn.clicked.connect(self._import_csv)
-
-        layout.addWidget(txt_btn)
-        layout.addWidget(csv_btn)
-
-        close_btn = QPushButton("Close")
-        close_btn.setProperty("class", "dialog-btn")
-        close_btn.clicked.connect(self.reject)
-        layout.addWidget(close_btn, alignment=Qt.AlignRight)
-
-    def _import_txt(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open Text File", "", "Text Files (*.txt)")
-        if path:
-            with open(path, "r", encoding="utf-8") as f:
-                self.imported_text = f.read()
-            self.accept()
-
-    def _import_csv(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open CSV File", "", "CSV Files (*.csv)")
-        if path:
-            error = import_csv_file(path)
-            if error:
-                msg = QMessageBox(self)
-                msg.setWindowTitle("Import Error")
-                msg.setText(error)
-                msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
-                msg.exec()
-            else:
-                self.imported_csv = True
-                self.accept()
-
-
-# ── Toast notification ────────────────────────────────────────────────────────
-
-class Toast(QLabel):
-    """A small non-blocking notification that fades away."""
-
-    def __init__(self, message: str, parent: QWidget):
-        super().__init__(message, parent)
-        self.setStyleSheet(
-            f"background-color: {PALETTE['toast_bg']}; "
-            f"color: {PALETTE['text']}; "
-            "padding: 8px 16px; "
-            "border-radius: 4px; "
-            "font-size: 11pt;"
-        )
-        self.adjustSize()
-        self._reposition(parent)
-        self.show()
-
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(2500, self.deleteLater)
-
-    def _reposition(self, parent: QWidget):
-        pw = parent.width()
-        ph = parent.height()
-        self.adjustSize()
-        x = pw - self.width() - 20
-        y = ph - self.height() - 20
-        self.move(x, y)
-        self.raise_()
-
-
-# ── Main window ───────────────────────────────────────────────────────────────
-
-class MainWindow(QMainWindow):
-
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Typewriter")
-        self.setMinimumSize(WINDOW_MIN_W, WINDOW_MIN_H)
-        self._current_font = "Sans Serif"
-        self._unsaved = False
-
-        self._build_ui()
-        self._apply_font(self._current_font)
-        self._refresh_sidebar()
-
-    # ── UI construction ───────────────────────────────────────────────────────
-
-    def _build_ui(self):
-        central = QWidget()
-        central.setObjectName("central")
-        self.setCentralWidget(central)
-
-        root = QHBoxLayout(central)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
-
-        # Sidebar
-        self._sidebar_widget = QWidget()
-        self._sidebar_widget.setObjectName("sidebar")
-        self._sidebar_widget.setFixedWidth(SIDEBAR_WIDTH)
-        sidebar_layout = QVBoxLayout(self._sidebar_widget)
-        sidebar_layout.setContentsMargins(14, 20, 14, 20)
-        sidebar_layout.setSpacing(8)
-
-        self._word_count_lbl = QLabel()
-        self._word_count_lbl.setObjectName("wordCountLabel")
-        self._word_count_lbl.setWordWrap(True)
-        sidebar_layout.addWidget(self._word_count_lbl)
-
-        sidebar_layout.addSpacing(6)
-
-        self._btn_submit   = self._sidebar_button("Submit && Clear")
-        self._btn_view     = self._sidebar_button("View Summary")
-        self._btn_export   = self._sidebar_button("Export Work")
-        self._btn_import   = self._sidebar_button("Import Work")
-        self._btn_settings = self._sidebar_button("Settings")
-
-        for btn in [self._btn_submit, self._btn_view, self._btn_export,
-                    self._btn_import, self._btn_settings]:
-            sidebar_layout.addWidget(btn)
-
-        sidebar_layout.addStretch()
-
-        self._btn_submit.clicked.connect(self._on_submit)
-        self._btn_view.clicked.connect(self._on_view_summary)
-        self._btn_export.clicked.connect(self._on_export)
-        self._btn_import.clicked.connect(self._on_import)
-        self._btn_settings.clicked.connect(self._on_settings)
-
-        # Main writing area
-        main_area = QWidget()
-        main_area.setObjectName("mainArea")
-        main_layout = QVBoxLayout(main_area)
-        main_layout.setContentsMargins(40, 30, 40, 30)
-
-        self._editor = QTextEdit()
-        self._editor.setObjectName("editor")
-        self._editor.setPlaceholderText("It was a dark and stormy night...")
-        self._editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self._editor.textChanged.connect(self._on_text_changed)
-        main_layout.addWidget(self._editor)
-
-        root.addWidget(self._sidebar_widget)
-        root.addWidget(main_area, stretch=1)
-
-    def _sidebar_button(self, text: str) -> QPushButton:
-        btn = QPushButton(text)
-        btn.setProperty("class", "sidebar-btn")
-        btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        btn.setFixedHeight(34)
-        return btn
-
-    # ── Font / style ──────────────────────────────────────────────────────────
-
-    def _apply_font(self, font_name: str):
-        self._current_font = font_name
-        fo = FONT_OPTIONS[font_name]
-        self.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
-
-    # ── Sidebar state ─────────────────────────────────────────────────────────
-
-    def _refresh_sidebar(self):
-        count = get_word_count()
-        if count == 0:
-            msg = "You've submitted 0 words.\n(It's going to be great.)"
-        elif count == 1:
-            msg = "You've submitted 1 word.\n(And it's a great start.)"
-        else:
-            msg = f"You've submitted {count} words.\n(And they're all amazing.)"
-        self._word_count_lbl.setText(msg)
-
-        has_csv = os.path.exists(CSV_PATH)
-        self._btn_view.setVisible(has_csv)
-        self._btn_export.setVisible(has_csv)
-        self._btn_import.setVisible(not has_csv)
-
-    # ── Unsaved-changes guard ─────────────────────────────────────────────────
-
-    def _on_text_changed(self):
-        self._unsaved = bool(self._editor.toPlainText())
-
-    def closeEvent(self, event: QCloseEvent):
-        if self._unsaved:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Unsaved Entry")
-            msg.setText("You have an unsaved entry. Are you sure you want to quit?")
-            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-            msg.setDefaultButton(QMessageBox.No)
-            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
-            reply = msg.exec()
-            if reply == QMessageBox.No:
-                event.ignore()
-                return
-        event.accept()
-
-    # ── Button handlers ───────────────────────────────────────────────────────
-
-    def _on_submit(self):
-        entry = self._editor.toPlainText().strip()
-        if not entry:
-            self._show_toast("You have to write something first! :P")
-            return
-
-        dlg = AddSummaryDialog(entry, self)
-        self._apply_dialog_style(dlg)
-        if dlg.exec() == QDialog.Accepted:
-            submit_entry(entry, dlg.summary)
-            self._editor.clear()
-            self._unsaved = False
-            self._refresh_sidebar()
-            self._show_toast("Successfully submitted! ^_^")
-
-    def _on_view_summary(self):
-        dlg = SummaryDialog(self)
-        self._apply_dialog_style(dlg)
-        dlg.exec()
-
-    def _on_export(self):
-        dlg = ExportDialog(self)
-        self._apply_dialog_style(dlg)
-        dlg.exec()
-
-    def _on_import(self):
-        has_content = bool(self._editor.toPlainText().strip())
-        dlg = ImportDialog(has_content, self)
-        self._apply_dialog_style(dlg)
-        if dlg.exec() == QDialog.Accepted:
-            if dlg.imported_text is not None:
-                self._editor.setPlainText(dlg.imported_text)
-                self._unsaved = True
-                self._show_toast("File imported! Keep writing.")
-            elif dlg.imported_csv:
-                self._refresh_sidebar()
-                self._show_toast("CSV imported successfully! ^_^")
-
-    def _on_settings(self):
-        dlg = SettingsDialog(self._current_font, self)
-        self._apply_dialog_style(dlg)
-        if dlg.exec() == QDialog.Accepted:
-            self._apply_font(dlg.chosen_font)
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
-
-    def _apply_dialog_style(self, dlg: QDialog):
-        fo = FONT_OPTIONS[self._current_font]
-        dlg.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
-
-    def _show_toast(self, message: str):
-        Toast(message, self.centralWidget())
-
-
-# ── Entry point ───────────────────────────────────────────────────────────────
-
-def main():
-    app = QApplication(sys.argv)
-    app.setApplicationName("Typewriter")
-
-    # Attempt to load bundled/system fonts (best-effort)
-    for family in ["Atkinson Hyperlegible", "Crimson Text", "Courier Prime"]:
-        QFontDatabase.addApplicationFont(family)
-
-    window = MainWindow()
-    window.resize(1000, 680)
-    window.show()
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 2rem; max-width: 720px; margin: 0 auto; font-size: 15px; line-height: 1.5; }
+  h1 { font-size: 18px; font-weight: 500; margin-bottom: 1.5rem; color: var(--text); }
+  .summary-row { display: flex; gap: 10px; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .stat { background: var(--bg-secondary); border-radius: var(--radius-md); padding: 10px 16px; flex: 1; min-width: 80px; }
+  .stat-num { font-size: 22px; font-weight: 500; color: var(--text); }
+  .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 1.25rem; flex-wrap: wrap; align-items: center; }
+  .toolbar input { flex: 1; min-width: 180px; font-size: 14px; padding: 8px 12px; border-radius: var(--radius-md); border: 0.5px solid var(--border-secondary); background: var(--bg); color: var(--text); outline: none; }
+  .toolbar input:focus { border-color: var(--text-secondary); }
+  .toolbar select { font-size: 14px; padding: 8px 10px; border-radius: var(--radius-md); border: 0.5px solid var(--border-secondary); background: var(--bg); color: var(--text); outline: none; cursor: pointer; }
+  .btn { font-size: 13px; padding: 8px 14px; border-radius: var(--radius-md); border: 0.5px solid var(--border-secondary); background: var(--bg); color: var(--text); cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--bg-secondary); }
+  .filters { display: flex; gap: 6px; margin-bottom: 1rem; flex-wrap: wrap; }
+  .filter-btn { font-size: 12px; padding: 4px 12px; border-radius: 999px; border: 0.5px solid var(--border); background: var(--bg); color: var(--text-secondary); cursor: pointer; }
+  .filter-btn.active { background: var(--bg-secondary); color: var(--text); border-color: var(--border-secondary); }
+  .feature-list { display: flex; flex-direction: column; gap: 8px; }
+  .feature-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 12px 16px; display: flex; align-items: flex-start; gap: 12px; }
+  .feature-card:hover { border-color: var(--border-secondary); }
+  .feature-body { flex: 1; min-width: 0; }
+  .feature-title { font-size: 14px; color: var(--text); font-weight: 500; margin-bottom: 3px; word-break: break-word; }
+  .feature-note { font-size: 13px; color: var(--text-secondary); word-break: break-word; margin-top: 3px; }
+  .feature-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .badge { font-size: 11px; padding: 3px 9px; border-radius: 999px; font-weight: 500; }
+  .badge-todo { background: #D3D1C7; color: #444441; }
+  .badge-inprogress { background: #B5D4F4; color: #0C447C; }
+  .badge-done { background: #C0DD97; color: #27500A; }
+  .badge-blocked { background: #F7C1C1; color: #791F1F; }
+  .date-label { font-size: 11px; color: var(--text-tertiary); }
+  .status-select { font-size: 12px; padding: 3px 7px; border-radius: var(--radius-md); border: 0.5px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
+  .actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .icon-btn { font-size: 13px; padding: 4px 8px; border-radius: var(--radius-md); border: 0.5px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; }
+  .icon-btn:hover { background: var(--bg-secondary); color: var(--text); }
+  .empty { text-align: center; padding: 2.5rem 1rem; color: var(--text-tertiary); font-size: 14px; }
+  .note-input { font-size: 13px; padding: 5px 10px; border-radius: var(--radius-md); border: 0.5px solid var(--border-secondary); background: var(--bg); color: var(--text); width: 100%; margin-top: 6px; outline: none; }
+</style>
+</head>
+<body>
+<h1>Typewriter — feature tracker</h1>
+<div class="summary-row" id="summary-row"></div>
+<div class="toolbar">
+  <input type="text" id="new-title" placeholder="New feature or bug..." />
+  <select id="new-status">
+    <option value="todo">To Do</option>
+    <option value="inprogress">In Progress</option>
+    <option value="done">Done</option>
+    <option value="blocked">Blocked</option>
+  </select>
+  <button class="btn" onclick="addFeature()">+ Add</button>
+  <button class="btn" onclick="copyForClaude()">Copy for Claude</button>
+</div>
+<div class="filters" id="filters"></div>
+<div class="feature-list" id="feature-list"></div>
+
+<script>
+const STORAGE_KEY = 'typewriter-features-v1';
+const STATUSES = ['all','todo','inprogress','done','blocked'];
+const STATUS_LABELS = { all:'All', todo:'To Do', inprogress:'In Progress', done:'Done', blocked:'Blocked' };
+const BADGE_CLASS = { todo:'badge-todo', inprogress:'badge-inprogress', done:'badge-done', blocked:'badge-blocked' };
+
+let features = [];
+let activeFilter = 'all';
+let editingNote = null;
+
+function load() {
+  try { features = JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch(e) { features = []; }
+  render();
+}
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(features)); } catch(e) {}
+}
+
+function addFeature() {
+  const title = document.getElementById('new-title').value.trim();
+  if (!title) return;
+  const status = document.getElementById('new-status').value;
+  features.unshift({ id: Date.now(), title, status, note: '', date: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) });
+  document.getElementById('new-title').value = '';
+  save(); render();
+}
+
+document.getElementById('new-title').addEventListener('keydown', e => { if (e.key === 'Enter') addFeature(); });
+
+function setStatus(id, status) {
+  const f = features.find(x => x.id === id);
+  if (f) { f.status = status; save(); render(); }
+}
+
+function deleteFeature(id) {
+  if (!confirm('Delete this item?')) return;
+  features = features.filter(x => x.id !== id);
+  save(); render();
+}
+
+function saveNote(id, val) {
+  const f = features.find(x => x.id === id);
+  if (f) { f.note = val; save(); }
+  editingNote = null; render();
+}
+
+function copyForClaude() {
+  const lines = ['Typewriter feature tracker:\n'];
+  STATUSES.slice(1).forEach(s => {
+    const items = features.filter(f => f.status === s);
+    if (items.length) {
+      lines.push(STATUS_LABELS[s] + ':');
+      items.forEach(f => { lines.push('- ' + f.title + (f.note ? ' (' + f.note + ')' : '')); });
+      lines.push('');
+    }
+  });
+  navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
+  const btn = document.querySelectorAll('.btn')[1];
+  const orig = btn.textContent;
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
+function render() {
+  const filtered = activeFilter === 'all' ? features : features.filter(f => f.status === activeFilter);
+  const counts = {};
+  STATUSES.forEach(s => counts[s] = s === 'all' ? features.length : features.filter(f => f.status === s).length);
+
+  document.getElementById('summary-row').innerHTML = STATUSES.slice(1).map(s =>
+    '<div class="stat"><div class="stat-num">' + counts[s] + '</div><div class="stat-label">' + STATUS_LABELS[s] + '</div></div>'
+  ).join('');
+
+  document.getElementById('filters').innerHTML = STATUSES.map(s =>
+    '<button class="filter-btn' + (activeFilter === s ? ' active' : '') + '" onclick="setFilter(\'' + s + '\')">' +
+    STATUS_LABELS[s] + (s !== 'all' ? ' (' + counts[s] + ')' : '') + '</button>'
+  ).join('');
+
+  const list = document.getElementById('feature-list');
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty">' + (activeFilter === 'all' ? 'No features yet — add one above.' : 'No items with this status.') + '</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(f =>
+    '<div class="feature-card">' +
+      '<div class="feature-body">' +
+        '<div class="feature-title">' + esc(f.title) + '</div>' +
+        (f.note && editingNote !== f.id ? '<div class="feature-note">' + esc(f.note) + '</div>' : '') +
+        (editingNote === f.id ? '<input class="note-input" id="note-' + f.id + '" value="' + escA(f.note) + '" placeholder="Add a note..." onblur="saveNote(' + f.id + ', this.value)" onkeydown="if(event.key===\'Enter\') saveNote(' + f.id + ', this.value)" />' : '') +
+        '<div class="feature-meta">' +
+          '<span class="badge ' + BADGE_CLASS[f.status] + '">' + STATUS_LABELS[f.status] + '</span>' +
+          '<span class="date-label">' + f.date + '</span>' +
+          '<select class="status-select" onchange="setStatus(' + f.id + ', this.value)">' +
+            STATUSES.slice(1).map(s => '<option value="' + s + '"' + (f.status===s?' selected':'') + '>' + STATUS_LABELS[s] + '</option>').join('') +
+          '</select>' +
+        '</div>' +
+      '</div>' +
+      '<div class="actions">' +
+        '<button class="icon-btn" onclick="startNote(' + f.id + ')" title="Add note">✎</button>' +
+        '<button class="icon-btn" onclick="deleteFeature(' + f.id + ')" title="Delete">✕</button>' +
+      '</div>' +
+    '</div>'
+  ).join('');
+
+  if (editingNote !== null) {
+    const el = document.getElementById('note-' + editingNote);
+    if (el) { el.focus(); el.select(); }
+  }
+}
+
+function setFilter(s) { activeFilter = s; render(); }
+function startNote(id) { editingNote = id; render(); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escA(s) { return String(s).replace(/"/g,'&quot;'); }
+
+load();
+</script>
+</body>
+</html>
