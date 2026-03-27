@@ -113,9 +113,9 @@ def load_summaries() -> list[tuple[str, str]]:
     rows = []
     with open(CSV_PATH, "r", encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            rows.append((row["date"], row["summary"]))
-    rows.sort(key=lambda r: r[0], reverse=True)
-    return [(date_format(d), s) for d, s in rows]
+            rows.append((row["date"], row["time"], row["summary"]))
+    rows.sort(key=lambda r: (r[0], r[1]), reverse=True)
+    return [(date_format(d), s) for d, t, s in rows]
 
 
 def import_csv_file(path: str) -> str | None:
@@ -442,14 +442,22 @@ class ExportDialog(QDialog):
             text = export_text()
             with open(dest, "w", encoding="utf-8") as f:
                 f.write(text)
-            QMessageBox.information(self, "Exported", f"Text saved to:\n{dest}")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Exported")
+            msg.setText(f"Text saved to:\n{dest}")
+            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            msg.exec()
 
     def _export_csv(self):
         dest, _ = QFileDialog.getSaveFileName(self, "Save CSV File", "novel.csv", "CSV Files (*.csv)")
         if dest:
             import shutil
             shutil.copy2(CSV_PATH, dest)
-            QMessageBox.information(self, "Exported", f"CSV saved to:\n{dest}")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Exported")
+            msg.setText(f"CSV saved to:\n{dest}")
+            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            msg.exec()
 
 
 class ImportDialog(QDialog):
@@ -501,7 +509,11 @@ class ImportDialog(QDialog):
         if path:
             error = import_csv_file(path)
             if error:
-                QMessageBox.warning(self, "Import Error", error)
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Import Error")
+                msg.setText(error)
+                msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+                msg.exec()
             else:
                 self.imported_csv = True
                 self.accept()
