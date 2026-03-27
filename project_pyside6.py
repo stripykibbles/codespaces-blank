@@ -663,12 +663,13 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent):
         if self._unsaved:
-            reply = QMessageBox.question(
-                self, "Unsaved Entry",
-                "You have an unsaved entry. Are you sure you want to quit?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Unsaved Entry")
+            msg.setText("You have an unsaved entry. Are you sure you want to quit?")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setDefaultButton(QMessageBox.No)
+            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            reply = msg.exec()
             if reply == QMessageBox.No:
                 event.ignore()
                 return
