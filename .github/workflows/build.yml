@@ -24,7 +24,7 @@ jobs:
 
       - name: Build app
         run: |
-          pyinstaller onward.spec --target-arch x86_64
+          pyinstaller onward.spec
 
       - name: Zip the .app bundle
         run: |
@@ -54,7 +54,7 @@ jobs:
 
       - name: Build app
         run: |
-          pyinstaller onward.spec
+          pyinstaller onward-arm.spec
 
       - name: Zip the .app bundle
         run: |
