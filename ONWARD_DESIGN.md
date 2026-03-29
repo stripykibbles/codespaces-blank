@@ -6,6 +6,17 @@ A living document capturing key design decisions for the Onward desktop app. Upd
 
 ---
 
+## System Requirements
+
+| Platform | Minimum Version |
+|----------|----------------|
+| macOS | 13.0 (Ventura) |
+| Windows | Windows 10 |
+
+The macOS 13 minimum is a hard requirement imposed by Qt (the framework underlying PySide6) and cannot be worked around. Onward will not launch on macOS 12 Monterey or earlier.
+
+---
+
 ## Project File Format
 
 ### `.onward` as a folder bundle
