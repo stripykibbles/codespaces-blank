@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 a = Analysis(
-    ['project_pyside6.py'],
+    ['onward.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -25,14 +25,14 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='Typewriter',
+    name='Onward',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,       # no terminal window
+    console=False,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
@@ -42,9 +42,9 @@ exe = EXE(
 # macOS: wrap the exe in a .app bundle
 app = BUNDLE(
     exe,
-    name='Typewriter.app',
+    name='Onward.app',
     icon=None,
-    bundle_identifier='com.typewriter.app',
+    bundle_identifier='com.onward.app',
     info_plist={
         'NSHighResolutionCapable': True,
         'CFBundleShortVersionString': '1.0.0',

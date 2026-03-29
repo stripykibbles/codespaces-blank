@@ -556,7 +556,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Typewriter")
+        self.setWindowTitle("Onward")
         self.setMinimumSize(WINDOW_MIN_W, WINDOW_MIN_H)
         self._current_font = "Sans Serif"
         self._unsaved = False
@@ -735,7 +735,7 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("Typewriter")
+    app.setApplicationName("Onward")
 
     # Attempt to load bundled/system fonts (best-effort)
     for family in ["Atkinson Hyperlegible", "Crimson Text", "Courier Prime"]:

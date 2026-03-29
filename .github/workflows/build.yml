@@ -1,13 +1,43 @@
-name: Build Typewriter App
+name: Build Onward App
 
 on:
   push:
     branches: [ 2.0 ]
-  workflow_dispatch:  # allows you to trigger the build manually from GitHub
+  workflow_dispatch:
 
 jobs:
 
-  build-mac:
+  build-mac-intel:
+    runs-on: macos-13
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install PySide6 pyinstaller
+
+      - name: Build app
+        run: |
+          pyinstaller onward.spec --target-arch x86_64
+
+      - name: Zip the .app bundle
+        run: |
+          cd dist
+          zip -r Onward-Mac-Intel.zip Onward.app
+
+      - name: Upload Mac Intel build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Onward-Mac-Intel
+          path: dist/Onward-Mac-Intel.zip
+
+  build-mac-arm:
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -24,18 +54,18 @@ jobs:
 
       - name: Build app
         run: |
-          pyinstaller typewriter.spec
+          pyinstaller onward.spec
 
       - name: Zip the .app bundle
         run: |
           cd dist
-          zip -r Typewriter-Mac.zip Typewriter.app
+          zip -r Onward-Mac-ARM.zip Onward.app
 
-      - name: Upload Mac build
+      - name: Upload Mac ARM build
         uses: actions/upload-artifact@v4
         with:
-          name: Typewriter-Mac
-          path: dist/Typewriter-Mac.zip
+          name: Onward-Mac-ARM
+          path: dist/Onward-Mac-ARM.zip
 
   build-windows:
     runs-on: windows-latest
@@ -54,10 +84,10 @@ jobs:
 
       - name: Build app
         run: |
-          pyinstaller typewriter.spec
+          pyinstaller onward.spec
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: Typewriter-Windows
-          path: dist/Typewriter.exe
+          name: Onward-Windows
+          path: dist/Onward.exe
