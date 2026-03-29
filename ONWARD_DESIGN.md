@@ -2,7 +2,7 @@
 
 A living document capturing key design decisions for the Onward desktop app. Updated as decisions are made.
 
-> **Working title:** The app is currently called "Onward" and uses the `.onward` file extension. The final name will be revisited before any App Store release. F(r)ictionMaxxer is a candidate tagline. "You can use Word, or you can use Onward. Write Onward." is a candidate marketing line.
+> **Working title:** The app is currently called "Onward" and uses the `.onward` file extension. The final name will be revisited before any App Store release.
 
 ---
 
@@ -28,7 +28,7 @@ Onward projects are stored as folder bundles with the `.onward` extension, model
 
 **File type association:**
 - **Mac:** Declared in `Info.plist` inside the `.app` bundle via `CFBundleDocumentTypes`. Can be added directly to `onward.spec` in the existing `info_plist` section. macOS registers the association on first app launch.
-- **Windows:** Stored in the system registry. Requires either a proper installer (e.g. NSIS or Inno Setup) or the app writing registry entries on first launch. Not handled automatically by PyInstaller. More complex than Mac — tackle Mac first.
+- **Windows:** Stored in the system registry. Requires either a proper installer (e.g. NSIS or Inno Setup) or the app writing registry entries on first launch. Not handled automatically by PyInstaller. More complex than Mac (tackling Mac first).
 
 **Project location:** `~/Documents/Onward/[projectname].onward/`
 
