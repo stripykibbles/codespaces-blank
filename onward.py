@@ -760,6 +760,11 @@ class LaunchWindow(QMainWindow):
         open_btn.clicked.connect(self._on_open_project)
         layout.addWidget(open_btn, alignment=Qt.AlignCenter)
 
+        import_btn = QPushButton("Import")
+        import_btn.setProperty("class", "launch-btn")
+        import_btn.clicked.connect(self._on_import)
+        layout.addWidget(import_btn, alignment=Qt.AlignCenter)
+
         fo = FONT_OPTIONS["Sans Serif"]
         self.setStyleSheet(launch_stylesheet(fo["family"], fo["size"]))
 
@@ -774,42 +779,75 @@ class LaunchWindow(QMainWindow):
     def _on_open_project(self):
         os.makedirs(ONWARD_DIR, exist_ok=True)
 
-        import platform
-        if platform.system() == "Darwin":
-            # On Mac, use Qt's non-native dialog which allows selecting folders
-            # without navigating into them
-            dlg = QFileDialog(self, "Open Project", ONWARD_DIR)
-            dlg.setFileMode(QFileDialog.FileMode.Directory)
-            dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-            dlg.setOption(QFileDialog.Option.ShowDirsOnly, True)
-            if dlg.exec() == QDialog.Accepted:
-                bundle = dlg.selectedFiles()[0]
-            else:
-                bundle = ""
-        else:
-            bundle = QFileDialog.getExistingDirectory(
-                self,
-                "Open Project",
-                ONWARD_DIR,
-            )
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Project",
+            ONWARD_DIR,
+            "Onward Projects (*.onward)"
+        )
 
-        if bundle and bundle.endswith(".onward"):
-            project_name = os.path.basename(bundle)[:-len(".onward")]
+        if path and path.endswith(".onward"):
+            project_name = os.path.basename(path)[:-len(".onward")]
             self._chosen_project = project_name
             self._open_main_window()
-        elif bundle:
+        elif path:
             msg = QMessageBox(self)
             msg.setWindowTitle("Invalid Project")
             msg.setText("Please select a valid .onward project folder.")
             msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
             msg.exec()
 
-    def _open_main_window(self):
-        self._main = MainWindow(self._chosen_project)
+    def _on_import(self):
+        # Step 1: select file
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import File",
+            "",
+            "Supported Files (*.csv *.txt);;CSV Files (*.csv);;Text Files (*.txt)"
+        )
+        if not path:
+            return
+
+        _, ext = os.path.splitext(path)
+        ext = ext.lower()
+
+        # Step 2: validate CSV early so we don't ask for a name on bad files
+        if ext == ".csv":
+            with open(path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                if reader.fieldnames is None or list(reader.fieldnames) != FIELDNAMES:
+                    msg = QMessageBox(self)
+                    msg.setWindowTitle("Import Error")
+                    msg.setText("CSV file is not in a valid Onward format.")
+                    msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+                    msg.exec()
+                    return
+
+        # Step 3: ask for project name
+        dlg = NewProjectDialog(self)
+        fo  = FONT_OPTIONS["Sans Serif"]
+        dlg.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        project_name = dlg.project_name
+
+        # Step 4: import data into the new project
+        if ext == ".csv":
+            import_csv_file(project_name, path)
+            self._chosen_project = project_name
+            self._open_main_window(preload_text=None)
+        elif ext == ".txt":
+            with open(path, "r", encoding="utf-8") as f:
+                txt_content = f.read()
+            self._chosen_project = project_name
+            self._open_main_window(preload_text=txt_content)
+
+    def _open_main_window(self, preload_text: str | None = None):
+        self._main = MainWindow(self._chosen_project, preload_text=preload_text)
         self._main.resize(1000, 680)
         self._main.show()
         self.hide()
-        # Keep reference on app to prevent garbage collection
         QApplication.instance().main_window = self._main
 
 
@@ -817,7 +855,7 @@ class LaunchWindow(QMainWindow):
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, project_name: str):
+    def __init__(self, project_name: str, preload_text: str | None = None):
         super().__init__()
         self._project_name = project_name
         self.setWindowTitle(f"Onward — {project_name}")
@@ -834,7 +872,12 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._apply_font(self._current_font)
         self._refresh_sidebar()
-        self._check_autosave_recovery()
+
+        if preload_text:
+            self._editor.setPlainText(preload_text)
+            self._unsaved = True
+        else:
+            self._check_autosave_recovery()
 
     # ── Autosave ──────────────────────────────────────────────────────────────
 
@@ -895,11 +938,10 @@ class MainWindow(QMainWindow):
         self._btn_submit   = self._sidebar_button("Submit && Clear")
         self._btn_view     = self._sidebar_button("View Summary")
         self._btn_export   = self._sidebar_button("Export Work")
-        self._btn_import   = self._sidebar_button("Import Work")
         self._btn_settings = self._sidebar_button("Settings")
 
         for btn in [self._btn_submit, self._btn_view, self._btn_export,
-                    self._btn_import, self._btn_settings]:
+                    self._btn_settings]:
             sidebar_layout.addWidget(btn)
 
         sidebar_layout.addStretch()
@@ -907,7 +949,6 @@ class MainWindow(QMainWindow):
         self._btn_submit.clicked.connect(self._on_submit)
         self._btn_view.clicked.connect(self._on_view_summary)
         self._btn_export.clicked.connect(self._on_export)
-        self._btn_import.clicked.connect(self._on_import)
         self._btn_settings.clicked.connect(self._on_settings)
 
         # Main writing area
@@ -955,7 +996,6 @@ class MainWindow(QMainWindow):
         has_csv = os.path.exists(csv_path(self._project_name))
         self._btn_view.setVisible(has_csv)
         self._btn_export.setVisible(has_csv)
-        self._btn_import.setVisible(not has_csv)
 
     # ── Unsaved-changes guard ─────────────────────────────────────────────────
 
@@ -1004,19 +1044,6 @@ class MainWindow(QMainWindow):
         dlg = ExportDialog(self._project_name, self)
         self._apply_dialog_style(dlg)
         dlg.exec()
-
-    def _on_import(self):
-        has_content = bool(self._editor.toPlainText().strip())
-        dlg = ImportDialog(self._project_name, has_content, self)
-        self._apply_dialog_style(dlg)
-        if dlg.exec() == QDialog.Accepted:
-            if dlg.imported_text is not None:
-                self._editor.setPlainText(dlg.imported_text)
-                self._unsaved = True
-                self._show_toast("File imported! Keep writing.")
-            elif dlg.imported_csv:
-                self._refresh_sidebar()
-                self._show_toast("CSV imported successfully! ^_^")
 
     def _on_settings(self):
         dlg = SettingsDialog(self._current_font, self)

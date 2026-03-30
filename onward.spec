@@ -48,5 +48,14 @@ app = BUNDLE(
     info_plist={
         'NSHighResolutionCapable': True,
         'CFBundleShortVersionString': '1.0.0',
+        'CFBundleDocumentTypes': [
+            {
+                'CFBundleTypeName': 'Onward Project',
+                'CFBundleTypeExtensions': ['onward'],
+                'CFBundleTypeRole': 'Editor',
+                'LSHandlerRank': 'Owner',
+                'LSTypeIsPackage': True,
+            }
+        ],
     },
 )

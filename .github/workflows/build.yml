@@ -7,8 +7,8 @@ on:
 
 jobs:
 
-  build-mac-intel:
-    runs-on: macos-15-intel
+  build-mac:
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,43 +29,13 @@ jobs:
       - name: Zip the .app bundle
         run: |
           cd dist
-          zip -r Onward-Mac-Intel.zip Onward.app
+          zip -r Onward-Mac.zip Onward.app
 
-      - name: Upload Mac Intel build
+      - name: Upload Mac build
         uses: actions/upload-artifact@v4
         with:
-          name: Onward-Mac-Intel
-          path: dist/Onward-Mac-Intel.zip
-
-  build-mac-arm:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          pip install PySide6 pyinstaller
-
-      - name: Build app
-        run: |
-          pyinstaller onward-arm.spec
-
-      - name: Zip the .app bundle
-        run: |
-          cd dist
-          zip -r Onward-Mac-ARM.zip Onward.app
-
-      - name: Upload Mac ARM build
-        uses: actions/upload-artifact@v4
-        with:
-          name: Onward-Mac-ARM
-          path: dist/Onward-Mac-ARM.zip
+          name: Onward-Mac
+          path: dist/Onward-Mac.zip
 
   build-windows:
     runs-on: windows-latest
