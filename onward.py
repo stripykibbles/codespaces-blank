@@ -779,18 +779,29 @@ class LaunchWindow(QMainWindow):
     def _on_open_project(self):
         os.makedirs(ONWARD_DIR, exist_ok=True)
 
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open Project",
-            ONWARD_DIR,
-            "Onward Projects (*.onward)"
-        )
+        import platform
+        if platform.system() == "Darwin":
+            # On Mac, .onward bundles are registered file types — use native picker
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Open Project",
+                ONWARD_DIR,
+                "Onward Projects (*.onward)"
+            )
+            bundle = path
+        else:
+            # On Windows, .onward bundles are folders — use directory picker
+            bundle = QFileDialog.getExistingDirectory(
+                self,
+                "Open Project",
+                ONWARD_DIR,
+            )
 
-        if path and path.endswith(".onward"):
-            project_name = os.path.basename(path)[:-len(".onward")]
+        if bundle and bundle.endswith(".onward"):
+            project_name = os.path.basename(bundle)[:-len(".onward")]
             self._chosen_project = project_name
             self._open_main_window()
-        elif path:
+        elif bundle:
             msg = QMessageBox(self)
             msg.setWindowTitle("Invalid Project")
             msg.setText("Please select a valid .onward project folder.")

@@ -71,7 +71,7 @@ my-novel.onward/
 
 - On first launch and all subsequent launches, the app shows a screen with three options: **New Project**, **Open Project**, and **Import**
 - **New Project** — opens a dialog prompting the user to enter a project name, then creates a new `.onward` bundle and opens the main writing window.
-- **Open Project** uses the native OS file picker on both Mac and Windows — the user navigates to and selects a `.onward` bundle. On Mac, this requires `.onward` to be registered as a file type (via `CFBundleDocumentTypes` in `onward.spec`) so that bundles appear as selectable objects rather than folders in the picker.
+- **Open Project** uses a platform-specific file picker — on Mac, the native picker is used with an `*.onward` filter (enabled by file type registration); on Windows, a directory picker is used since `.onward` bundles are folders. In both cases the user navigates to and selects a `.onward` bundle.
 - **Import** — see Import section below.
 
 ---
