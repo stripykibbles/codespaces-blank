@@ -8,17 +8,16 @@ from datetime import datetime
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTextEdit, QLabel, QDialog, QComboBox, QFileDialog,
-    QSizePolicy, QFrame, QScrollArea, QMessageBox
+    QSizePolicy, QFrame, QScrollArea, QMessageBox, QLineEdit
 )
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QFont, QFontDatabase, QCloseEvent
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFontDatabase, QCloseEvent
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-FIELDNAMES = ["date", "time", "entry", "entry_word_count", "summary"]
-CSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "novel.csv")
-TXT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "novel.txt")
+FIELDNAMES    = ["date", "time", "entry", "entry_word_count", "summary"]
+ONWARD_DIR    = os.path.join(os.path.expanduser("~"), "Documents", "Onward")
 
 FONT_OPTIONS = {
     "Sans Serif":  {"family": "Atkinson Hyperlegible",  "size": 14},
@@ -26,7 +25,6 @@ FONT_OPTIONS = {
     "Monospace":   {"family": "Courier Prime",           "size": 13},
 }
 
-# Neutral light palette matching the original Streamlit aesthetic
 PALETTE = {
     "bg":           "#ffffff",
     "sidebar_bg":   "#f8f8f8",
@@ -45,7 +43,31 @@ WINDOW_MIN_W  = 860
 WINDOW_MIN_H  = 580
 
 
-# ── Pure logic (unchanged from original) ─────────────────────────────────────
+# ── Project path helpers ──────────────────────────────────────────────────────
+
+def project_bundle(project_name: str) -> str:
+    """Return the path to the .onward folder bundle for a given project name."""
+    return os.path.join(ONWARD_DIR, f"{project_name}.onward")
+
+def csv_path(project_name: str) -> str:
+    return os.path.join(project_bundle(project_name), f"{project_name}.csv")
+
+def txt_path(project_name: str) -> str:
+    return os.path.join(project_bundle(project_name), f"{project_name}.txt")
+
+def autosave_path(project_name: str) -> str:
+    return os.path.join(project_bundle(project_name), "autosave.tmp")
+
+def create_project(project_name: str) -> str | None:
+    """Create a new .onward bundle. Returns error string or None on success."""
+    bundle = project_bundle(project_name)
+    if os.path.exists(bundle):
+        return "A project with that name already exists."
+    os.makedirs(bundle)
+    return None
+
+
+# ── Pure logic ────────────────────────────────────────────────────────────────
 
 def get_characters(entry: str) -> int:
     chars = round(len(entry) / 3)
@@ -74,10 +96,10 @@ def date_format(d: str) -> str:
     return f"{month} {day}, {date.group(1)}"
 
 
-def get_word_count() -> int:
+def get_word_count(project_name: str) -> int:
     count = 0
     try:
-        with open(CSV_PATH, "r", encoding="utf-8") as f:
+        with open(csv_path(project_name), "r", encoding="utf-8") as f:
             for row in csv.DictReader(f):
                 count += int(row["entry_word_count"])
     except FileNotFoundError:
@@ -85,53 +107,82 @@ def get_word_count() -> int:
     return count
 
 
-def submit_entry(entry: str, summary: str):
+def submit_entry(project_name: str, entry: str, summary: str):
+    path = csv_path(project_name)
     date, time = date_parse(datetime.now())
     word_count  = len(entry.split())
     row = {"date": date, "time": time, "entry": entry,
            "entry_word_count": word_count, "summary": summary}
-    new_file = not os.path.exists(CSV_PATH)
-    with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
+    new_file = not os.path.exists(path)
+    with open(path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         if new_file:
             writer.writeheader()
         writer.writerow(row)
+    # Delete autosave on clean submit
+    apath = autosave_path(project_name)
+    if os.path.exists(apath):
+        os.remove(apath)
 
 
-def export_text() -> str:
+def export_text(project_name: str) -> str:
     novel = ""
-    with open(CSV_PATH, "r", encoding="utf-8") as f:
+    with open(csv_path(project_name), "r", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             novel += row["entry"] + "\n\n"
-    with open(TXT_PATH, "w", encoding="utf-8") as f:
-        f.write(novel)
     return novel
 
 
-def load_summaries() -> list[tuple[str, str]]:
-    """Return list of (formatted_date, summary) in reverse chronological order."""
+def load_summaries(project_name: str) -> list[tuple[str, str]]:
     rows = []
-    with open(CSV_PATH, "r", encoding="utf-8") as f:
+    with open(csv_path(project_name), "r", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             rows.append((row["date"], row["time"], row["summary"]))
     rows.sort(key=lambda r: (r[0], r[1]), reverse=True)
     return [(date_format(d), s) for d, t, s in rows]
 
 
-def import_csv_file(path: str) -> str | None:
-    """Import a CSV file. Returns error string or None on success."""
+def import_csv_file(project_name: str, path: str) -> str | None:
     with open(path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         if reader.fieldnames is None or list(reader.fieldnames) != FIELDNAMES:
             return "CSV file is not in a valid format."
         rows = list(reader)
-
-    new_file = not os.path.exists(CSV_PATH)
-    with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
+    dest = csv_path(project_name)
+    new_file = not os.path.exists(dest)
+    with open(dest, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         if new_file:
             writer.writeheader()
         writer.writerows(rows)
+    return None
+
+
+def write_autosave(project_name: str, text: str):
+    try:
+        with open(autosave_path(project_name), "w", encoding="utf-8") as f:
+            f.write(text)
+    except Exception:
+        pass
+
+
+def delete_autosave(project_name: str):
+    try:
+        apath = autosave_path(project_name)
+        if os.path.exists(apath):
+            os.remove(apath)
+    except Exception:
+        pass
+
+
+def read_autosave(project_name: str) -> str | None:
+    try:
+        apath = autosave_path(project_name)
+        if os.path.exists(apath):
+            with open(apath, "r", encoding="utf-8") as f:
+                return f.read()
+    except Exception:
+        pass
     return None
 
 
@@ -174,6 +225,11 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
         font-size: {font_size - 1}pt;
         line-height: 1.4;
     }}
+    QLabel#projectNameLabel {{
+        color: {p['muted']};
+        font-family: "{font_family}";
+        font-size: {font_size - 2}pt;
+    }}
     QLabel#muted {{
         color: {p['muted']};
         font-family: "{font_family}";
@@ -188,6 +244,15 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
         font-size: {font_size - 1}pt;
     }}
     QTextEdit.dialog-input {{
+        background-color: {p['bg']};
+        color: {p['text']};
+        border: 1px solid {p['border']};
+        border-radius: 4px;
+        font-family: "{font_family}";
+        font-size: {font_size - 1}pt;
+        padding: 6px;
+    }}
+    QLineEdit.dialog-input {{
         background-color: {p['bg']};
         color: {p['text']};
         border: 1px solid {p['border']};
@@ -234,13 +299,121 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
     """
 
+def launch_stylesheet(font_family: str, font_size: int) -> str:
+    p = PALETTE
+    return f"""
+    QWidget#launchWidget {{
+        background-color: {p['bg']};
+    }}
+    QLabel#launchTitle {{
+        color: {p['text']};
+        font-family: "{font_family}";
+        font-size: {font_size + 6}pt;
+        font-weight: bold;
+    }}
+    QPushButton.launch-btn {{
+        background-color: {p['btn_bg']};
+        color: {p['text']};
+        border: none;
+        border-radius: 4px;
+        padding: 10px 24px;
+        font-family: "{font_family}";
+        font-size: {font_size}pt;
+        min-width: 160px;
+    }}
+    QPushButton.launch-btn:hover   {{ background-color: {p['btn_hover']}; }}
+    QPushButton.launch-btn:pressed {{ background-color: {p['btn_pressed']}; }}
+    QLabel.dialog-body {{
+        color: {p['text']};
+        font-family: "{font_family}";
+        font-size: {font_size - 1}pt;
+    }}
+    QLineEdit.dialog-input {{
+        background-color: {p['bg']};
+        color: {p['text']};
+        border: 1px solid {p['border']};
+        border-radius: 4px;
+        font-family: "{font_family}";
+        font-size: {font_size - 1}pt;
+        padding: 6px;
+    }}
+    QPushButton.dialog-btn {{
+        background-color: {p['btn_bg']};
+        color: {p['text']};
+        border: none;
+        border-radius: 4px;
+        padding: 6px 16px;
+        font-family: "{font_family}";
+        font-size: {font_size - 1}pt;
+    }}
+    QPushButton.dialog-btn:hover   {{ background-color: {p['btn_hover']}; }}
+    QPushButton.dialog-btn:pressed {{ background-color: {p['btn_pressed']}; }}
+    """
+
 
 # ── Dialogs ───────────────────────────────────────────────────────────────────
+
+class NewProjectDialog(QDialog):
+    """Prompts user to enter a name for a new project."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.project_name = ""
+        self.setWindowTitle("New Project")
+        self.setFixedSize(360, 170)
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(8)
+
+        lbl = QLabel("Project name:")
+        lbl.setProperty("class", "dialog-body")
+        layout.addWidget(lbl)
+
+        self.name_input = QLineEdit()
+        self.name_input.setProperty("class", "dialog-input")
+        self.name_input.setPlaceholderText("e.g. my-novel")
+        self.name_input.returnPressed.connect(self._on_create)
+        layout.addWidget(self.name_input)
+
+        self.error_lbl = QLabel("")
+        self.error_lbl.setStyleSheet("color: #c0392b; font-size: 11pt;")
+        self.error_lbl.setWordWrap(True)
+        self.error_lbl.setVisible(False)
+        layout.addWidget(self.error_lbl)
+
+        layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setProperty("class", "dialog-btn")
+        cancel_btn.clicked.connect(self.reject)
+        create_btn = QPushButton("Create")
+        create_btn.setProperty("class", "dialog-btn")
+        create_btn.clicked.connect(self._on_create)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(create_btn)
+        layout.addLayout(btn_row)
+
+    def _on_create(self):
+        name = self.name_input.text().strip()
+        if not name:
+            return
+        error = create_project(name)
+        if error:
+            self.error_lbl.setText(error)
+            self.error_lbl.setVisible(True)
+            return
+        self.project_name = name
+        self.accept()
+
 
 class SummaryDialog(QDialog):
     """Shows all entry summaries in reverse chronological order."""
 
-    def __init__(self, parent=None):
+    def __init__(self, project_name: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Summary")
         self.setMinimumSize(460, 380)
@@ -258,7 +431,7 @@ class SummaryDialog(QDialog):
         inner_layout.setSpacing(0)
 
         try:
-            entries = load_summaries()
+            entries = load_summaries(project_name)
         except FileNotFoundError:
             entries = []
 
@@ -269,7 +442,6 @@ class SummaryDialog(QDialog):
             inner_layout.addWidget(lbl)
         else:
             for fmt_date, summary_text in entries:
-                # Date chip
                 date_lbl = QLabel(fmt_date)
                 date_lbl.setObjectName("muted")
                 date_lbl.setStyleSheet(
@@ -280,7 +452,6 @@ class SummaryDialog(QDialog):
                 )
                 inner_layout.addWidget(date_lbl)
 
-                # Summary text with left border
                 summary_frame = QFrame()
                 summary_frame.setStyleSheet(
                     f"border-left: 2px solid {PALETTE['border']}; "
@@ -410,8 +581,9 @@ class SettingsDialog(QDialog):
 class ExportDialog(QDialog):
     """Export TXT or CSV."""
 
-    def __init__(self, parent=None):
+    def __init__(self, project_name: str, parent=None):
         super().__init__(parent)
+        self._project_name = project_name
         self.setWindowTitle("Export Work")
         self.setFixedSize(280, 130)
         self.setModal(True)
@@ -437,9 +609,10 @@ class ExportDialog(QDialog):
         layout.addWidget(close_btn, alignment=Qt.AlignRight)
 
     def _export_txt(self):
-        dest, _ = QFileDialog.getSaveFileName(self, "Save Text File", "novel.txt", "Text Files (*.txt)")
+        default_name = f"{self._project_name}.txt"
+        dest, _ = QFileDialog.getSaveFileName(self, "Save Text File", default_name, "Text Files (*.txt)")
         if dest:
-            text = export_text()
+            text = export_text(self._project_name)
             with open(dest, "w", encoding="utf-8") as f:
                 f.write(text)
             msg = QMessageBox(self)
@@ -449,10 +622,13 @@ class ExportDialog(QDialog):
             msg.exec()
 
     def _export_csv(self):
-        dest, _ = QFileDialog.getSaveFileName(self, "Save CSV File", "novel.csv", "CSV Files (*.csv)")
+        from datetime import datetime as dt
+        timestamp = dt.now().strftime("%Y%m%d-%H%M%S")
+        default_name = f"{self._project_name}-{timestamp}.csv"
+        dest, _ = QFileDialog.getSaveFileName(self, "Save CSV File", default_name, "CSV Files (*.csv)")
         if dest:
             import shutil
-            shutil.copy2(CSV_PATH, dest)
+            shutil.copy2(csv_path(self._project_name), dest)
             msg = QMessageBox(self)
             msg.setWindowTitle("Exported")
             msg.setText(f"CSV saved to:\n{dest}")
@@ -463,10 +639,11 @@ class ExportDialog(QDialog):
 class ImportDialog(QDialog):
     """Import TXT or CSV."""
 
-    def __init__(self, has_existing_content: bool, parent=None):
+    def __init__(self, project_name: str, has_existing_content: bool, parent=None):
         super().__init__(parent)
-        self.imported_text = None   # set if TXT imported
-        self.imported_csv  = False  # set True if CSV imported successfully
+        self._project_name = project_name
+        self.imported_text = None
+        self.imported_csv  = False
         self.setWindowTitle("Import Work")
         self.setFixedSize(320, 150)
         self.setModal(True)
@@ -507,7 +684,7 @@ class ImportDialog(QDialog):
     def _import_csv(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open CSV File", "", "CSV Files (*.csv)")
         if path:
-            error = import_csv_file(path)
+            error = import_csv_file(self._project_name, path)
             if error:
                 msg = QMessageBox(self)
                 msg.setWindowTitle("Import Error")
@@ -536,34 +713,153 @@ class Toast(QLabel):
         self.adjustSize()
         self._reposition(parent)
         self.show()
-
-        from PySide6.QtCore import QTimer
         QTimer.singleShot(2500, self.deleteLater)
 
     def _reposition(self, parent: QWidget):
-        pw = parent.width()
-        ph = parent.height()
         self.adjustSize()
-        x = pw - self.width() - 20
-        y = ph - self.height() - 20
+        x = parent.width()  - self.width()  - 20
+        y = parent.height() - self.height() - 20
         self.move(x, y)
         self.raise_()
+
+
+# ── Launch screen ─────────────────────────────────────────────────────────────
+
+class LaunchWindow(QMainWindow):
+    """New Project / Open Project screen shown on every launch."""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Onward")
+        self.setFixedSize(400, 260)
+        self._chosen_project = None
+
+        central = QWidget()
+        central.setObjectName("launchWidget")
+        self.setCentralWidget(central)
+
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(50, 50, 50, 50)
+        layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignCenter)
+
+        title = QLabel("Onward")
+        title.setObjectName("launchTitle")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        layout.addSpacing(8)
+
+        new_btn = QPushButton("New Project")
+        new_btn.setProperty("class", "launch-btn")
+        new_btn.clicked.connect(self._on_new_project)
+        layout.addWidget(new_btn, alignment=Qt.AlignCenter)
+
+        open_btn = QPushButton("Open Project")
+        open_btn.setProperty("class", "launch-btn")
+        open_btn.clicked.connect(self._on_open_project)
+        layout.addWidget(open_btn, alignment=Qt.AlignCenter)
+
+        fo = FONT_OPTIONS["Sans Serif"]
+        self.setStyleSheet(launch_stylesheet(fo["family"], fo["size"]))
+
+    def _on_new_project(self):
+        dlg = NewProjectDialog(self)
+        fo  = FONT_OPTIONS["Sans Serif"]
+        dlg.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
+        if dlg.exec() == QDialog.Accepted:
+            self._chosen_project = dlg.project_name
+            self._open_main_window()
+
+    def _on_open_project(self):
+        os.makedirs(ONWARD_DIR, exist_ok=True)
+
+        import platform
+        if platform.system() == "Darwin":
+            # On Mac, use Qt's non-native dialog which allows selecting folders
+            # without navigating into them
+            dlg = QFileDialog(self, "Open Project", ONWARD_DIR)
+            dlg.setFileMode(QFileDialog.FileMode.Directory)
+            dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+            dlg.setOption(QFileDialog.Option.ShowDirsOnly, True)
+            if dlg.exec() == QDialog.Accepted:
+                bundle = dlg.selectedFiles()[0]
+            else:
+                bundle = ""
+        else:
+            bundle = QFileDialog.getExistingDirectory(
+                self,
+                "Open Project",
+                ONWARD_DIR,
+            )
+
+        if bundle and bundle.endswith(".onward"):
+            project_name = os.path.basename(bundle)[:-len(".onward")]
+            self._chosen_project = project_name
+            self._open_main_window()
+        elif bundle:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Invalid Project")
+            msg.setText("Please select a valid .onward project folder.")
+            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            msg.exec()
+
+    def _open_main_window(self):
+        self._main = MainWindow(self._chosen_project)
+        self._main.resize(1000, 680)
+        self._main.show()
+        self.hide()
+        # Keep reference on app to prevent garbage collection
+        QApplication.instance().main_window = self._main
 
 
 # ── Main window ───────────────────────────────────────────────────────────────
 
 class MainWindow(QMainWindow):
 
-    def __init__(self):
+    def __init__(self, project_name: str):
         super().__init__()
-        self.setWindowTitle("Onward")
+        self._project_name = project_name
+        self.setWindowTitle(f"Onward — {project_name}")
         self.setMinimumSize(WINDOW_MIN_W, WINDOW_MIN_H)
         self._current_font = "Sans Serif"
         self._unsaved = False
 
+        # Autosave timer — writes every 3 minutes
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setInterval(3 * 60 * 1000)
+        self._autosave_timer.timeout.connect(self._do_autosave)
+        self._autosave_timer.start()
+
         self._build_ui()
         self._apply_font(self._current_font)
         self._refresh_sidebar()
+        self._check_autosave_recovery()
+
+    # ── Autosave ──────────────────────────────────────────────────────────────
+
+    def _do_autosave(self):
+        text = self._editor.toPlainText()
+        if text.strip():
+            write_autosave(self._project_name, text)
+
+    def _check_autosave_recovery(self):
+        recovered = read_autosave(self._project_name)
+        if recovered:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Recover Unsaved Entry")
+            msg.setText(
+                "It looks like Onward closed unexpectedly. "
+                "Would you like to recover your unsaved entry?"
+            )
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setDefaultButton(QMessageBox.Yes)
+            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            if msg.exec() == QMessageBox.Yes:
+                self._editor.setPlainText(recovered)
+                self._unsaved = True
+            else:
+                delete_autosave(self._project_name)
 
     # ── UI construction ───────────────────────────────────────────────────────
 
@@ -583,6 +879,11 @@ class MainWindow(QMainWindow):
         sidebar_layout = QVBoxLayout(self._sidebar_widget)
         sidebar_layout.setContentsMargins(14, 20, 14, 20)
         sidebar_layout.setSpacing(8)
+
+        self._project_name_lbl = QLabel(self._project_name)
+        self._project_name_lbl.setObjectName("projectNameLabel")
+        self._project_name_lbl.setWordWrap(True)
+        sidebar_layout.addWidget(self._project_name_lbl)
 
         self._word_count_lbl = QLabel()
         self._word_count_lbl.setObjectName("wordCountLabel")
@@ -642,7 +943,7 @@ class MainWindow(QMainWindow):
     # ── Sidebar state ─────────────────────────────────────────────────────────
 
     def _refresh_sidebar(self):
-        count = get_word_count()
+        count = get_word_count(self._project_name)
         if count == 0:
             msg = "You've submitted 0 words.\n(It's going to be great.)"
         elif count == 1:
@@ -651,7 +952,7 @@ class MainWindow(QMainWindow):
             msg = f"You've submitted {count} words.\n(And they're all amazing.)"
         self._word_count_lbl.setText(msg)
 
-        has_csv = os.path.exists(CSV_PATH)
+        has_csv = os.path.exists(csv_path(self._project_name))
         self._btn_view.setVisible(has_csv)
         self._btn_export.setVisible(has_csv)
         self._btn_import.setVisible(not has_csv)
@@ -673,6 +974,8 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.No:
                 event.ignore()
                 return
+        delete_autosave(self._project_name)
+        self._autosave_timer.stop()
         event.accept()
 
     # ── Button handlers ───────────────────────────────────────────────────────
@@ -686,25 +989,25 @@ class MainWindow(QMainWindow):
         dlg = AddSummaryDialog(entry, self)
         self._apply_dialog_style(dlg)
         if dlg.exec() == QDialog.Accepted:
-            submit_entry(entry, dlg.summary)
+            submit_entry(self._project_name, entry, dlg.summary)
             self._editor.clear()
             self._unsaved = False
             self._refresh_sidebar()
             self._show_toast("Successfully submitted! ^_^")
 
     def _on_view_summary(self):
-        dlg = SummaryDialog(self)
+        dlg = SummaryDialog(self._project_name, self)
         self._apply_dialog_style(dlg)
         dlg.exec()
 
     def _on_export(self):
-        dlg = ExportDialog(self)
+        dlg = ExportDialog(self._project_name, self)
         self._apply_dialog_style(dlg)
         dlg.exec()
 
     def _on_import(self):
         has_content = bool(self._editor.toPlainText().strip())
-        dlg = ImportDialog(has_content, self)
+        dlg = ImportDialog(self._project_name, has_content, self)
         self._apply_dialog_style(dlg)
         if dlg.exec() == QDialog.Accepted:
             if dlg.imported_text is not None:
@@ -734,16 +1037,17 @@ class MainWindow(QMainWindow):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
+    os.makedirs(ONWARD_DIR, exist_ok=True)
+
     app = QApplication(sys.argv)
     app.setApplicationName("Onward")
 
-    # Attempt to load bundled/system fonts (best-effort)
     for family in ["Atkinson Hyperlegible", "Crimson Text", "Courier Prime"]:
         QFontDatabase.addApplicationFont(family)
 
-    window = MainWindow()
-    window.resize(1000, 680)
-    window.show()
+    launch = LaunchWindow()
+    app.launch = launch  # keep reference to prevent garbage collection
+    launch.show()
     sys.exit(app.exec())
 
 
