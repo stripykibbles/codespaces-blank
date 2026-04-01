@@ -1,5 +1,4 @@
 import sys
-import io
 import csv
 import os
 import re
@@ -635,65 +634,6 @@ class ExportDialog(QDialog):
             msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
             msg.exec()
 
-
-class ImportDialog(QDialog):
-    """Import TXT or CSV."""
-
-    def __init__(self, project_name: str, has_existing_content: bool, parent=None):
-        super().__init__(parent)
-        self._project_name = project_name
-        self.imported_text = None
-        self.imported_csv  = False
-        self.setWindowTitle("Import Work")
-        self.setFixedSize(320, 150)
-        self.setModal(True)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-
-        if has_existing_content:
-            warn = QLabel("⚠ Importing will overwrite your current entry.")
-            warn.setStyleSheet(f"color: {PALETTE['muted']}; font-size: 10pt;")
-            warn.setWordWrap(True)
-            layout.addWidget(warn)
-
-        txt_btn = QPushButton("Import Text File (.txt)")
-        txt_btn.setProperty("class", "dialog-btn")
-        txt_btn.clicked.connect(self._import_txt)
-
-        csv_btn = QPushButton("Import CSV File (.csv)")
-        csv_btn.setProperty("class", "dialog-btn")
-        csv_btn.clicked.connect(self._import_csv)
-
-        layout.addWidget(txt_btn)
-        layout.addWidget(csv_btn)
-
-        close_btn = QPushButton("Close")
-        close_btn.setProperty("class", "dialog-btn")
-        close_btn.clicked.connect(self.reject)
-        layout.addWidget(close_btn, alignment=Qt.AlignRight)
-
-    def _import_txt(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open Text File", "", "Text Files (*.txt)")
-        if path:
-            with open(path, "r", encoding="utf-8") as f:
-                self.imported_text = f.read()
-            self.accept()
-
-    def _import_csv(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open CSV File", "", "CSV Files (*.csv)")
-        if path:
-            error = import_csv_file(self._project_name, path)
-            if error:
-                msg = QMessageBox(self)
-                msg.setWindowTitle("Import Error")
-                msg.setText(error)
-                msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
-                msg.exec()
-            else:
-                self.imported_csv = True
-                self.accept()
 
 
 # ── Toast notification ────────────────────────────────────────────────────────

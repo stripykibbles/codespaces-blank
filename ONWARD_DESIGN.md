@@ -148,6 +148,10 @@ The planned changes have a clear dependency chain — each step unlocks the next
 ## Known Limitations & Testing Notes
 
 - **Open Project on Mac (built app)** — the native file picker with `.onward` file type registration has not been tested in the built `.app` yet. When running `onward.py` directly on Mac, file type registration is not active, so this can only be verified in a GitHub Actions build. Testing is pending access to a Mac running macOS 13+ where the built app can be launched.
+- **Full flow on Mac ARM (built app)** — the complete app flow (New Project, writing, submitting, Open Project, autosave recovery) has been tested by running `onward.py` directly on ARM Mac, but not in the built `.app` from GitHub Actions. Worth downloading and testing the full flow in the built app.
+- **Autosave recovery on Mac** — crash recovery has been verified on Windows but not yet tested on Mac.
+- **Full flow testing on Mac ARM (built app)** — the complete app flow (New Project, Open Project, Import, Submit, Export, autosave recovery) has been tested running `onward.py` directly on ARM Mac but not as a built `.app` from GitHub Actions. Should be verified once a built `.app` can be tested on an ARM Mac running macOS 13+.
+- **Autosave recovery on Mac** — autosave and crash recovery have been tested on Windows only. Should be verified on Mac.
 
 ---
 
