@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QLabel, QDialog, QComboBox, QFileDialog,
     QSizePolicy, QFrame, QScrollArea, QMessageBox, QLineEdit
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve
 from PySide6.QtGui import QFontDatabase, QCloseEvent
 
 
@@ -922,14 +922,38 @@ class MainWindow(QMainWindow):
         central.setObjectName("central")
         self.setCentralWidget(central)
 
-        root = QHBoxLayout(central)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+        # Main writing area fills the full window
+        main_area = QWidget()
+        main_area.setObjectName("mainArea")
+        main_area.setParent(central)
+        main_layout = QVBoxLayout(main_area)
+        main_layout.setContentsMargins(40, 30, 40, 30)
 
-        # Sidebar
+        self._editor = QTextEdit()
+        self._editor.setObjectName("editor")
+        self._editor.setPlaceholderText("It was a dark and stormy night...")
+        self._editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._editor.textChanged.connect(self._on_text_changed)
+        main_layout.addWidget(self._editor)
+
+        # Toggle button — sits in top-left of writing area
+        self._toggle_btn = QPushButton("<<")
+        self._toggle_btn.setParent(central)
+        self._toggle_btn.setFixedSize(32, 32)
+        self._toggle_btn.clicked.connect(self._toggle_sidebar)
+        self._toggle_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; "
+            f"color: {PALETTE['muted']}; font-size: 13pt; }}"
+            f"QPushButton:hover {{ color: {PALETTE['text']}; }}"
+        )
+
+        # Sidebar overlays the writing area
         self._sidebar_widget = QWidget()
         self._sidebar_widget.setObjectName("sidebar")
+        self._sidebar_widget.setParent(central)
         self._sidebar_widget.setFixedWidth(SIDEBAR_WIDTH)
+        self._sidebar_widget.hide()
+
         sidebar_layout = QVBoxLayout(self._sidebar_widget)
         sidebar_layout.setContentsMargins(14, 20, 14, 20)
         sidebar_layout.setSpacing(8)
@@ -957,26 +981,96 @@ class MainWindow(QMainWindow):
 
         sidebar_layout.addStretch()
 
+        sidebar_layout.addStretch()
+
+        # Close button — top-right corner of sidebar, mirrors << position
+        self._close_btn = QPushButton(">>")
+        self._close_btn.setParent(self._sidebar_widget)
+        self._close_btn.setFixedSize(32, 32)
+        self._close_btn.clicked.connect(self._toggle_sidebar)
+        self._close_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; "
+            f"color: {PALETTE['muted']}; font-size: 13pt; }}"
+            f"QPushButton:hover {{ color: {PALETTE['text']}; }}"
+        )
+
         self._btn_submit.clicked.connect(self._on_submit)
         self._btn_view.clicked.connect(self._on_view_summary)
         self._btn_export.clicked.connect(self._on_export)
         self._btn_settings.clicked.connect(self._on_settings)
 
-        # Main writing area
-        main_area = QWidget()
-        main_area.setObjectName("mainArea")
-        main_layout = QVBoxLayout(main_area)
-        main_layout.setContentsMargins(40, 30, 40, 30)
+        # Root layout — just the main area, sidebar overlays on top
+        root = QVBoxLayout(central)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(main_area)
 
-        self._editor = QTextEdit()
-        self._editor.setObjectName("editor")
-        self._editor.setPlaceholderText("It was a dark and stormy night...")
-        self._editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self._editor.textChanged.connect(self._on_text_changed)
-        main_layout.addWidget(self._editor)
+        # Animation for sidebar slide
+        self._sidebar_anim = QPropertyAnimation(self._sidebar_widget, b"geometry")
+        self._sidebar_anim.setDuration(200)
+        self._sidebar_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._sidebar_open = False
 
-        root.addWidget(self._sidebar_widget)
-        root.addWidget(main_area, stretch=1)
+    def resizeEvent(self, event):
+        """Keep sidebar and toggle button positioned correctly on resize."""
+        super().resizeEvent(event)
+        h = self.centralWidget().height()
+
+        # Toggle button in top-left of writing area
+        self._toggle_btn.move(8, 8)
+        self._toggle_btn.raise_()
+
+        # Close button in top-right of sidebar
+        self._close_btn.move(SIDEBAR_WIDTH - 40, 8)
+        self._close_btn.raise_()
+
+        # Sidebar covers full height on left side
+        if self._sidebar_open:
+            self._sidebar_widget.setGeometry(0, 0, SIDEBAR_WIDTH, h)
+        else:
+            self._sidebar_widget.setGeometry(-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h)
+        self._sidebar_widget.raise_()
+
+    def _toggle_sidebar(self):
+        import warnings
+        h = self.centralWidget().height()
+        if self._sidebar_open:
+            # Slide out
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    self._sidebar_anim.finished.disconnect()
+                except Exception:
+                    pass
+            self._sidebar_anim.setStartValue(QRect(0, 0, SIDEBAR_WIDTH, h))
+            self._sidebar_anim.setEndValue(QRect(-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h))
+            self._sidebar_anim.finished.connect(lambda: self._sidebar_widget.hide())
+            self._sidebar_anim.start()
+            self._toggle_btn.setText("<<")
+            self._sidebar_open = False
+        else:
+            # Slide in
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    self._sidebar_anim.finished.disconnect()
+                except Exception:
+                    pass
+            self._sidebar_widget.setGeometry(-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h)
+            self._sidebar_widget.show()
+            self._sidebar_widget.raise_()
+            self._sidebar_anim.setStartValue(QRect(-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h))
+            self._sidebar_anim.setEndValue(QRect(0, 0, SIDEBAR_WIDTH, h))
+            self._sidebar_anim.start()
+            self._toggle_btn.setText(">>")
+            self._sidebar_open = True
+
+    def mousePressEvent(self, event):
+        """Close sidebar when clicking outside it."""
+        if self._sidebar_open:
+            sidebar_rect = self._sidebar_widget.geometry()
+            if not sidebar_rect.contains(event.pos()):
+                self._toggle_sidebar()
+        super().mousePressEvent(event)
 
     def _sidebar_button(self, text: str) -> QPushButton:
         btn = QPushButton(text)
