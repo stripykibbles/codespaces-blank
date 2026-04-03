@@ -1,4 +1,4 @@
-# Onward — Design Decisions
+g# Onward — Design Decisions
 
 A living document capturing key design decisions for the Onward desktop app. Updated as decisions are made.
 
@@ -45,6 +45,14 @@ my-novel.onward/
     my-novel.csv        ← submitted entries
     autosave.tmp        ← crash recovery, only present mid-session
 ```
+
+---
+
+## Plain Text
+
+Onward is a plain text app. Rich text formatting (bold, italic, underline) is not supported. Paste events strip formatting — only plain text is accepted in both the main editor and the summary input. Export TXT produces a clean plain text file.
+
+This decision may be revisited in the future if users request it. If rich text is added, markdown is the preferred approach — it stores cleanly as plain text in the CSV and exports naturally as `.txt` without requiring a format change.
 
 ---
 
@@ -98,14 +106,17 @@ Import is not available from within the main writing window — it is a launch-t
 
 ## Sidebar
 
-The sidebar is hidden by default, giving the writing area the full window width — similar to writing in Notepad. It is triggered by a small button or icon in the corner of the writing area.
+The sidebar is a right-side animated overlay panel, hidden by default, giving the writing area the full window width. The toggle row (`project-name >>`) floats on its own Z layer in the top-right corner of the writing area. Clicking it slides the sidebar in from the right and switches the text to `<< project-name`, left-aligned at the sidebar's left edge. Clicking anywhere outside the sidebar, or clicking the toggle row again, slides it back out. The animation uses `QPropertyAnimation` with an `OutCubic` easing curve.
 
-- **Trigger:** A small button/icon in the top-left corner of the writing area
-- **Appearance:** Slides in and overlays the writing area (does not push or resize it)
-- **Dismissal:** Clicking the trigger button again, or clicking anywhere outside the sidebar
-- **Animation:** Smooth slide-in/slide-out using `QPropertyAnimation`
+The sidebar contains:
+- Word count
+- Submit & Clear
+- View Summary (visible only after first submission)
+- Export Work (visible only after first submission)
+- Settings
+- Send Feedback (bottom-aligned, visually separated from action buttons)
 
-The sidebar contains: project name display, word count, Submit & Clear, View Summary, Export Work, and Settings.
+**Send Feedback** opens a mailto link to the app's feedback address. No third-party form service is used — the user's own mail client handles the interaction.
 
 ---
 
@@ -132,33 +143,16 @@ Export CSV is distinct from the internal `.onward` format. It is a portable, hum
 
 ---
 
-## Implementation Order & Dependencies
-
-The planned changes have a clear dependency chain — each step unlocks the next:
-
-1. ✅ **Project naming UI** — the user needs a way to enter a project name. Everything else depends on this.
-2. ✅ **First launch / New Project / Open Project / Import screen** — this is where project naming happens.
-3. ✅ **`.onward` folder structure + file paths** — once the project name is known, create `~/Documents/Onward/[projectname].onward/` and route the CSV there. Replaces the current hardcoded `novel.csv` path.
-4. ✅ **Autosave** — periodic writes to `autosave.tmp` and crash recovery flow on launch.
-5. ✅ **Export/Import updates** — Export TXT and Export CSV use the new paths and naming conventions. Import moved to launch screen.
-6. ✅ **Sidebar refactor** — persistent sidebar replaced with an animated overlay panel triggered by a << button in the top-left corner of the writing area. Slides in/out with a smooth animation, dismissed by clicking >> or anywhere outside the sidebar.
-
----
-
 ## Known Limitations & Testing Notes
 
 - **Open Project on Mac (built app)** — the native file picker with `.onward` file type registration has not been tested in the built `.app` yet. When running `onward.py` directly on Mac, file type registration is not active, so this can only be verified in a GitHub Actions build. Testing is pending access to a Mac running macOS 13+ where the built app can be launched.
-- **Full flow on Mac ARM (built app)** — the complete app flow (New Project, writing, submitting, Open Project, autosave recovery) has been tested by running `onward.py` directly on ARM Mac, but not in the built `.app` from GitHub Actions. Worth downloading and testing the full flow in the built app.
-- **Autosave recovery on Mac** — crash recovery has been verified on Windows but not yet tested on Mac.
-- **Full flow testing on Mac ARM (built app)** — the complete app flow (New Project, Open Project, Import, Submit, Export, autosave recovery) has been tested running `onward.py` directly on ARM Mac but not as a built `.app` from GitHub Actions. Should be verified once a built `.app` can be tested on an ARM Mac running macOS 13+.
+- **Full flow on Mac ARM (built app)** — the complete app flow (New Project, Open Project, Import, Submit, Export, autosave recovery) has been tested running `onward.py` directly on ARM Mac but not as a built `.app` from GitHub Actions. Should be verified once a built `.app` can be tested on an ARM Mac running macOS 13+.
 - **Autosave recovery on Mac** — autosave and crash recovery have been tested on Windows only. Should be verified on Mac.
 
 ---
 
 ## Decisions Still Pending
 
-- Where exactly is the project name displayed in the UI?
 - Font options and dark mode — where do these live in the UI?
 - Should users have the option to have summaries generated automatically by AI, rather than writing them manually?
-- Should the editor support rich text formatting (bold, italic, underline)? This would affect how entries are stored, displayed, and exported, and would determine whether RTF should be supported as an import/export format.
 - Should users be able to start a new project from within the main writing window (without having to quit and relaunch)? If so, where does this option live in the UI?

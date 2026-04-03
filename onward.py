@@ -499,7 +499,7 @@ class AddSummaryDialog(QDialog):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.text_edit = QTextEdit()
+        self.text_edit = PlainTextEditor()
         self.text_edit.setProperty("class", "dialog-input")
         self.text_edit.setFixedHeight(100)
         self.text_edit.textChanged.connect(self._enforce_limit)
@@ -634,6 +634,16 @@ class ExportDialog(QDialog):
             msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
             msg.exec()
 
+
+
+# ── Plain text editor ─────────────────────────────────────────────────────────
+
+class PlainTextEditor(QTextEdit):
+    """QTextEdit that strips formatting on paste, keeping plain text only."""
+
+    def insertFromMimeData(self, source):
+        if source.hasText():
+            self.insertPlainText(source.text())
 
 
 # ── Toast notification ────────────────────────────────────────────────────────
@@ -869,23 +879,24 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(main_area)
         main_layout.setContentsMargins(40, 30, 40, 30)
 
-        self._editor = QTextEdit()
+        self._editor = PlainTextEditor()
         self._editor.setObjectName("editor")
         self._editor.setPlaceholderText("It was a dark and stormy night...")
         self._editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._editor.textChanged.connect(self._on_text_changed)
         main_layout.addWidget(self._editor)
 
-        # Toggle button — sits in top-left of writing area
-        self._toggle_btn = QPushButton("<<")
-        self._toggle_btn.setParent(central)
-        self._toggle_btn.setFixedSize(32, 32)
-        self._toggle_btn.clicked.connect(self._toggle_sidebar)
-        self._toggle_btn.setStyleSheet(
+        # Toggle row — project name + >> in top-right, entire row is clickable
+        self._toggle_row = QPushButton(f"{self._project_name}  >>")
+        self._toggle_row.setParent(central)
+        self._toggle_row.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._toggle_row.clicked.connect(self._toggle_sidebar)
+        self._toggle_row.setStyleSheet(
             f"QPushButton {{ background: transparent; border: none; "
-            f"color: {PALETTE['muted']}; font-size: 13pt; }}"
+            f"color: {PALETTE['placeholder']}; font-size: 10pt; padding: 0; }}"
             f"QPushButton:hover {{ color: {PALETTE['text']}; }}"
         )
+        self._toggle_row.adjustSize()
 
         # Sidebar overlays the writing area
         self._sidebar_widget = QWidget()
@@ -895,14 +906,8 @@ class MainWindow(QMainWindow):
         self._sidebar_widget.hide()
 
         sidebar_layout = QVBoxLayout(self._sidebar_widget)
-        sidebar_layout.setContentsMargins(14, 20, 14, 20)
+        sidebar_layout.setContentsMargins(16, 48, 16, 20)
         sidebar_layout.setSpacing(8)
-
-        self._project_name_lbl = QLabel(self._project_name)
-        self._project_name_lbl.setObjectName("projectNameLabel")
-        self._project_name_lbl.setWordWrap(True)
-        sidebar_layout.addWidget(self._project_name_lbl)
-
         self._word_count_lbl = QLabel()
         self._word_count_lbl.setObjectName("wordCountLabel")
         self._word_count_lbl.setWordWrap(True)
@@ -914,30 +919,20 @@ class MainWindow(QMainWindow):
         self._btn_view     = self._sidebar_button("View Summary")
         self._btn_export   = self._sidebar_button("Export Work")
         self._btn_settings = self._sidebar_button("Settings")
+        self._btn_feedback = self._sidebar_button("Send Feedback")
 
         for btn in [self._btn_submit, self._btn_view, self._btn_export,
                     self._btn_settings]:
             sidebar_layout.addWidget(btn)
 
         sidebar_layout.addStretch()
-
-        sidebar_layout.addStretch()
-
-        # Close button — top-right corner of sidebar, mirrors << position
-        self._close_btn = QPushButton(">>")
-        self._close_btn.setParent(self._sidebar_widget)
-        self._close_btn.setFixedSize(32, 32)
-        self._close_btn.clicked.connect(self._toggle_sidebar)
-        self._close_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none; "
-            f"color: {PALETTE['muted']}; font-size: 13pt; }}"
-            f"QPushButton:hover {{ color: {PALETTE['text']}; }}"
-        )
+        sidebar_layout.addWidget(self._btn_feedback)
 
         self._btn_submit.clicked.connect(self._on_submit)
         self._btn_view.clicked.connect(self._on_view_summary)
         self._btn_export.clicked.connect(self._on_export)
         self._btn_settings.clicked.connect(self._on_settings)
+        self._btn_feedback.clicked.connect(self._on_feedback)
 
         # Root layout — just the main area, sidebar overlays on top
         root = QVBoxLayout(central)
@@ -951,64 +946,79 @@ class MainWindow(QMainWindow):
         self._sidebar_open = False
 
     def resizeEvent(self, event):
-        """Keep sidebar and toggle button positioned correctly on resize."""
         super().resizeEvent(event)
+        self._reposition_overlay_elements()
+
+    def _reposition_overlay_elements(self):
+        """Position sidebar and toggle row correctly."""
         h = self.centralWidget().height()
+        w = self.centralWidget().width()
 
-        # Toggle button in top-left of writing area
-        self._toggle_btn.move(8, 8)
-        self._toggle_btn.raise_()
-
-        # Close button in top-right of sidebar
-        self._close_btn.move(SIDEBAR_WIDTH - 40, 8)
-        self._close_btn.raise_()
-
-        # Sidebar covers full height on left side
         if self._sidebar_open:
-            self._sidebar_widget.setGeometry(0, 0, SIDEBAR_WIDTH, h)
+            # Expanded: left-aligned at sidebar left edge + 16px
+            self._toggle_row.adjustSize()
+            self._toggle_row.move(w - SIDEBAR_WIDTH + 16, 12)
         else:
-            self._sidebar_widget.setGeometry(-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h)
+            # Collapsed: right-aligned, 16px from right edge
+            self._toggle_row.adjustSize()
+            self._toggle_row.move(w - self._toggle_row.width() - 16, 12)
+
+        self._toggle_row.raise_()
+
+        # Sidebar covers full height on right side
+        if self._sidebar_open:
+            self._sidebar_widget.setGeometry(w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h)
+        else:
+            self._sidebar_widget.setGeometry(w, 0, SIDEBAR_WIDTH, h)
         self._sidebar_widget.raise_()
+
+        # Toggle row is always the top layer
+        self._toggle_row.raise_()
 
     def _toggle_sidebar(self):
         import warnings
         h = self.centralWidget().height()
+        w = self.centralWidget().width()
         if self._sidebar_open:
-            # Slide out
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 try:
                     self._sidebar_anim.finished.disconnect()
                 except Exception:
                     pass
-            self._sidebar_anim.setStartValue(QRect(0, 0, SIDEBAR_WIDTH, h))
-            self._sidebar_anim.setEndValue(QRect(-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h))
+            self._sidebar_anim.setStartValue(QRect(w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h))
+            self._sidebar_anim.setEndValue(QRect(w, 0, SIDEBAR_WIDTH, h))
             self._sidebar_anim.finished.connect(lambda: self._sidebar_widget.hide())
             self._sidebar_anim.start()
-            self._toggle_btn.setText("<<")
             self._sidebar_open = False
+            self._toggle_row.setText(f"{self._project_name}  >>")
+            self._toggle_row.adjustSize()
+            self._toggle_row.move(w - self._toggle_row.width() - 16, 12)
+            self._toggle_row.raise_()
         else:
-            # Slide in
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 try:
                     self._sidebar_anim.finished.disconnect()
                 except Exception:
                     pass
-            self._sidebar_widget.setGeometry(-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h)
+            self._sidebar_widget.setGeometry(w, 0, SIDEBAR_WIDTH, h)
             self._sidebar_widget.show()
-            self._sidebar_widget.raise_()
-            self._sidebar_anim.setStartValue(QRect(-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h))
-            self._sidebar_anim.setEndValue(QRect(0, 0, SIDEBAR_WIDTH, h))
+            self._sidebar_anim.setStartValue(QRect(w, 0, SIDEBAR_WIDTH, h))
+            self._sidebar_anim.setEndValue(QRect(w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h))
+            self._sidebar_anim.finished.connect(lambda: self._toggle_row.raise_())
             self._sidebar_anim.start()
-            self._toggle_btn.setText(">>")
             self._sidebar_open = True
+            self._toggle_row.setText(f"<<  {self._project_name}")
+            self._toggle_row.adjustSize()
+            self._toggle_row.move(w - SIDEBAR_WIDTH + 16, 12)
+            self._toggle_row.raise_()
 
     def mousePressEvent(self, event):
         """Close sidebar when clicking outside it."""
         if self._sidebar_open:
             sidebar_rect = self._sidebar_widget.geometry()
-            if not sidebar_rect.contains(event.pos()):
+            if not sidebar_rect.contains(event.position().toPoint()):
                 self._toggle_sidebar()
         super().mousePressEvent(event)
 
@@ -1025,6 +1035,16 @@ class MainWindow(QMainWindow):
         self._current_font = font_name
         fo = FONT_OPTIONS[font_name]
         self.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
+        # Update toggle row and close button to match selected font
+        self._toggle_row.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; "
+            f"color: {PALETTE['placeholder']}; font-family: '{fo['family']}'; "
+            f"font-size: 10pt; padding: 0; }}"
+            f"QPushButton:hover {{ color: {PALETTE['text']}; }}"
+        )
+        self._toggle_row.adjustSize()
+        # Reposition toggle row after font/size change
+        self._reposition_overlay_elements()
 
     # ── Sidebar state ─────────────────────────────────────────────────────────
 
@@ -1095,6 +1115,13 @@ class MainWindow(QMainWindow):
         self._apply_dialog_style(dlg)
         if dlg.exec() == QDialog.Accepted:
             self._apply_font(dlg.chosen_font)
+
+    def _on_feedback(self):
+        import urllib.parse
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        subject = urllib.parse.quote("Onward Feedback")
+        QDesktopServices.openUrl(QUrl(f"mailto:missing.sharpie404@passfwd.com?subject={subject}"))
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
