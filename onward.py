@@ -19,9 +19,9 @@ FIELDNAMES    = ["date", "time", "entry", "entry_word_count", "summary"]
 ONWARD_DIR    = os.path.join(os.path.expanduser("~"), "Documents", "Onward")
 
 FONT_OPTIONS = {
-    "Sans Serif":  {"family": "Atkinson Hyperlegible",  "size": 14},
-    "Serif":       {"family": "Crimson Text",            "size": 15},
-    "Monospace":   {"family": "Courier Prime",           "size": 13},
+    "Sans Serif":  {"family": "Atkinson Hyperlegible Next", "size": 14},
+    "Serif":       {"family": "Crimson Text",               "size": 15},
+    "Monospace":   {"family": "Courier Prime",              "size": 13},
 }
 
 PALETTE = {
@@ -566,7 +566,7 @@ class SettingsDialog(QDialog):
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        save_btn = QPushButton("Save & Close")
+        save_btn = QPushButton("Save && Close")
         save_btn.setProperty("class", "dialog-btn")
         save_btn.clicked.connect(self._save)
         btn_row.addWidget(save_btn)
@@ -575,6 +575,47 @@ class SettingsDialog(QDialog):
     def _save(self):
         self.chosen_font = self.combo.currentText()
         self.accept()
+
+
+class FeedbackDialog(QDialog):
+    """Explains the feedback process and provides a mailto link."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Send Feedback")
+        self.setFixedSize(360, 160)
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        body = QLabel(
+            "We'd love to hear from you! If you have a feature request, "
+            "a bug to report, or anything else on your mind, get in touch "
+            "with our team at "
+            "<a href='mailto:missing.sharpie404@passfwd.com' "
+            "style='color: #1a1a1a;'>missing.sharpie404@passfwd.com</a>."
+        )
+        body.setProperty("class", "dialog-body")
+        body.setWordWrap(True)
+        body.setTextFormat(Qt.RichText)
+        body.setOpenExternalLinks(False)
+        body.setToolTip("Opens your mail client")
+        body.linkActivated.connect(self._open_mail)
+        layout.addWidget(body)
+
+        layout.addStretch()
+
+        close_btn = QPushButton("Close")
+        close_btn.setProperty("class", "dialog-btn")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn, alignment=Qt.AlignRight)
+
+    def _open_mail(self, url: str):
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl(url))
 
 
 class ExportDialog(QDialog):
@@ -667,7 +708,7 @@ class Toast(QLabel):
 
     def _reposition(self, parent: QWidget):
         self.adjustSize()
-        x = parent.width()  - self.width()  - 20
+        x = 20
         y = parent.height() - self.height() - 20
         self.move(x, y)
         self.raise_()
@@ -834,6 +875,10 @@ class MainWindow(QMainWindow):
         self._apply_font(self._current_font)
         self._refresh_sidebar()
 
+        # Force a second font refresh after the event loop starts to ensure
+        # custom fonts are fully loaded and metrics are correct
+        QTimer.singleShot(0, lambda: self._apply_font(self._current_font))
+
         if preload_text:
             self._editor.setPlainText(preload_text)
             self._unsaved = True
@@ -918,21 +963,21 @@ class MainWindow(QMainWindow):
         self._btn_submit   = self._sidebar_button("Submit && Clear")
         self._btn_view     = self._sidebar_button("View Summary")
         self._btn_export   = self._sidebar_button("Export Work")
-        self._btn_settings = self._sidebar_button("Settings")
         self._btn_feedback = self._sidebar_button("Send Feedback")
+        self._btn_settings = self._sidebar_button("Settings")
 
-        for btn in [self._btn_submit, self._btn_view, self._btn_export,
-                    self._btn_settings]:
+        for btn in [self._btn_submit, self._btn_view, self._btn_export]:
             sidebar_layout.addWidget(btn)
 
         sidebar_layout.addStretch()
         sidebar_layout.addWidget(self._btn_feedback)
+        sidebar_layout.addWidget(self._btn_settings)
 
         self._btn_submit.clicked.connect(self._on_submit)
         self._btn_view.clicked.connect(self._on_view_summary)
         self._btn_export.clicked.connect(self._on_export)
-        self._btn_settings.clicked.connect(self._on_settings)
         self._btn_feedback.clicked.connect(self._on_feedback)
+        self._btn_settings.clicked.connect(self._on_settings)
 
         # Root layout — just the main area, sidebar overlays on top
         root = QVBoxLayout(central)
@@ -1117,11 +1162,9 @@ class MainWindow(QMainWindow):
             self._apply_font(dlg.chosen_font)
 
     def _on_feedback(self):
-        import urllib.parse
-        from PySide6.QtGui import QDesktopServices
-        from PySide6.QtCore import QUrl
-        subject = urllib.parse.quote("Onward Feedback")
-        QDesktopServices.openUrl(QUrl(f"mailto:missing.sharpie404@passfwd.com?subject={subject}"))
+        dlg = FeedbackDialog(self)
+        self._apply_dialog_style(dlg)
+        dlg.exec()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -1140,9 +1183,33 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("Onward")
+    app.setStyleSheet("QToolTip { color: #1a1a1a; background-color: #f8f8f8; border: 1px solid #e4e4e4; }")
 
-    for family in ["Atkinson Hyperlegible", "Crimson Text", "Courier Prime"]:
-        QFontDatabase.addApplicationFont(family)
+    from PySide6.QtWidgets import QToolTip
+    from PySide6.QtCore import QTimer
+    # Reduce tooltip delay from Qt default (~700ms) to 150ms
+    app.setProperty("toolTipDelay", 150)
+
+    # Load bundled fonts from the fonts/ directory
+    # sys._MEIPASS is set by PyInstaller when running as a bundled app
+    import sys as _sys
+    base_dir = getattr(_sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    font_dir = os.path.join(base_dir, "fonts")
+    for font_file in [
+        "AtkinsonHyperlegibleNext-Regular.ttf",
+        "AtkinsonHyperlegibleNext-Bold.ttf",
+        "AtkinsonHyperlegibleNext-RegularItalic.ttf",
+        "AtkinsonHyperlegibleNext-BoldItalic.ttf",
+        "CrimsonText-Regular.ttf",
+        "CrimsonText-Bold.ttf",
+        "CrimsonText-Italic.ttf",
+        "CrimsonText-BoldItalic.ttf",
+        "CourierPrime-Regular.ttf",
+        "CourierPrime-Bold.ttf",
+        "CourierPrime-Italic.ttf",
+        "CourierPrime-BoldItalic.ttf",
+    ]:
+        QFontDatabase.addApplicationFont(os.path.join(font_dir, font_file))
 
     launch = LaunchWindow()
     app.launch = launch  # keep reference to prevent garbage collection

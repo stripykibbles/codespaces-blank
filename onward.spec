@@ -4,7 +4,7 @@ a = Analysis(
     ['onward.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('fonts', 'fonts')],
     hiddenimports=[
         'PySide6.QtCore',
         'PySide6.QtGui',
