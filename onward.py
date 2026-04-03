@@ -7,7 +7,8 @@ from datetime import datetime
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTextEdit, QLabel, QDialog, QComboBox, QFileDialog,
-    QSizePolicy, QFrame, QScrollArea, QMessageBox, QLineEdit
+    QSizePolicy, QFrame, QScrollArea, QMessageBox, QLineEdit, QCheckBox,
+    QRadioButton, QButtonGroup
 )
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve
 from PySide6.QtGui import QFontDatabase, QCloseEvent
@@ -17,6 +18,7 @@ from PySide6.QtGui import QFontDatabase, QCloseEvent
 
 FIELDNAMES    = ["date", "time", "entry", "entry_word_count", "summary"]
 ONWARD_DIR    = os.path.join(os.path.expanduser("~"), "Documents", "Onward")
+SETTINGS_PATH = os.path.join(ONWARD_DIR, "settings.json")
 
 FONT_OPTIONS = {
     "Sans Serif":  {"family": "Atkinson Hyperlegible Next", "size": 14},
@@ -24,7 +26,7 @@ FONT_OPTIONS = {
     "Monospace":   {"family": "Courier Prime",              "size": 13},
 }
 
-PALETTE = {
+PALETTE_LIGHT = {
     "bg":           "#ffffff",
     "sidebar_bg":   "#f8f8f8",
     "border":       "#e4e4e4",
@@ -36,6 +38,22 @@ PALETTE = {
     "placeholder":  "#aaaaaa",
     "toast_bg":     "#e4e4e4",
 }
+
+PALETTE_DARK = {
+    "bg":           "#1a1a1a",
+    "sidebar_bg":   "#222222",
+    "border":       "#333333",
+    "btn_bg":       "#2a2a2a",
+    "btn_hover":    "#333333",
+    "btn_pressed":  "#3a3a3a",
+    "muted":        "#888888",
+    "text":         "#e8e8e8",
+    "placeholder":  "#555555",
+    "toast_bg":     "#2a2a2a",
+}
+
+# Active palette — toggled by dark mode setting
+PALETTE = PALETTE_LIGHT
 
 SIDEBAR_WIDTH = 220
 WINDOW_MIN_W  = 860
@@ -64,6 +82,53 @@ def create_project(project_name: str) -> str | None:
         return "A project with that name already exists."
     os.makedirs(bundle)
     return None
+
+
+# ── Global settings ───────────────────────────────────────────────────────────
+
+def load_settings() -> dict:
+    """Load global app settings from settings.json, returning defaults if missing."""
+    defaults = {"font": "Sans Serif", "dark_mode": False}
+    try:
+        import json
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if data.get("font") not in FONT_OPTIONS:
+                data["font"] = defaults["font"]
+            if "dark_mode" not in data:
+                data["dark_mode"] = defaults["dark_mode"]
+            return data
+    except Exception:
+        return defaults
+
+
+def save_settings(settings: dict):
+    """Save global app settings to settings.json."""
+    try:
+        import json
+        os.makedirs(ONWARD_DIR, exist_ok=True)
+        with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=2)
+    except Exception:
+        pass
+
+
+def apply_palette(dark: bool):
+    """Switch the global PALETTE between light and dark."""
+    global PALETTE
+    PALETTE = PALETTE_DARK if dark else PALETTE_LIGHT
+
+
+def msgbox_stylesheet() -> str:
+    """Returns a QMessageBox stylesheet using the current palette."""
+    p = PALETTE
+    return (
+        f"QLabel {{ color: {p['text']}; }} "
+        f"QPushButton {{ color: {p['text']}; background-color: {p['btn_bg']}; "
+        f"border: none; border-radius: 4px; padding: 6px 16px; }} "
+        f"QPushButton:hover {{ background-color: {p['btn_hover']}; }} "
+        f"QMessageBox {{ background-color: {p['bg']}; }}"
+    )
 
 
 # ── Pure logic ────────────────────────────────────────────────────────────────
@@ -281,6 +346,29 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
         font-size: {font_size - 1}pt;
     }}
     QComboBox::drop-down {{ border: none; }}
+    QComboBox QAbstractItemView {{
+        background-color: {p['btn_bg']};
+        color: {p['text']};
+        selection-background-color: {p['btn_hover']};
+        selection-color: {p['text']};
+        border: 1px solid {p['border']};
+    }}
+    QCheckBox, QRadioButton {{
+        color: {p['text']};
+        font-family: "{font_family}";
+        font-size: {font_size - 1}pt;
+    }}
+    QCheckBox::indicator, QRadioButton::indicator {{
+        width: 16px;
+        height: 16px;
+    }}
+    QComboBox QAbstractItemView {{
+        background-color: {p['btn_bg']};
+        color: {p['text']};
+        selection-background-color: {p['btn_hover']};
+        selection-color: {p['text']};
+        border: 1px solid {p['border']};
+    }}
     QScrollArea, QScrollArea > QWidget > QWidget {{
         background-color: {p['bg']};
         border: none;
@@ -541,39 +629,106 @@ class AddSummaryDialog(QDialog):
 
 
 class SettingsDialog(QDialog):
-    """Font picker."""
+    """Settings with radio buttons for font and mode, with live preview."""
 
-    def __init__(self, current_font: str, parent=None):
+    from PySide6.QtCore import Signal
+    font_changed = Signal(str)
+    dark_mode_changed = Signal(bool)
+
+    def __init__(self, current_font: str, dark_mode: bool, parent=None):
         super().__init__(parent)
         self.chosen_font = current_font
+        self.chosen_dark = dark_mode
+        self._original_font = current_font
+        self._original_dark = dark_mode
         self.setWindowTitle("Settings")
-        self.setFixedSize(300, 140)
+        self.setFixedSize(300, 280)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        layout.setSpacing(6)
 
-        lbl = QLabel("Select a font")
-        lbl.setProperty("class", "dialog-body")
-        layout.addWidget(lbl)
+        # ── Font section ──────────────────────────────────────────────
+        font_lbl = QLabel("Font")
+        font_lbl.setProperty("class", "dialog-body")
+        layout.addWidget(font_lbl)
 
-        self.combo = QComboBox()
-        for name in FONT_OPTIONS:
-            self.combo.addItem(name)
-        self.combo.setCurrentText(current_font)
-        layout.addWidget(self.combo)
+        self._font_group = QButtonGroup(self)
+        for name, opts in FONT_OPTIONS.items():
+            rb = QRadioButton(name)
+            rb.setChecked(name == current_font)
+            # Each option rendered in its own font
+            rb.setStyleSheet(
+                f"QRadioButton {{ font-family: '{opts['family']}'; "
+                f"font-size: {opts['size'] - 1}pt; color: {PALETTE['text']}; }}"
+            )
+            rb.toggled.connect(lambda checked, n=name: self._on_font_changed(n) if checked else None)
+            self._font_group.addButton(rb)
+            layout.addWidget(rb)
+
+        layout.addSpacing(8)
+
+        # ── Mode section ──────────────────────────────────────────────
+        mode_lbl = QLabel("Mode")
+        mode_lbl.setProperty("class", "dialog-body")
+        layout.addWidget(mode_lbl)
+
+        self._mode_group = QButtonGroup(self)
+        self._light_rb = QRadioButton("Light")
+        self._dark_rb  = QRadioButton("Dark")
+        self._light_rb.setChecked(not dark_mode)
+        self._dark_rb.setChecked(dark_mode)
+        self._light_rb.toggled.connect(lambda checked: self._on_dark_changed(False) if checked else None)
+        self._dark_rb.toggled.connect(lambda checked: self._on_dark_changed(True) if checked else None)
+        self._mode_group.addButton(self._light_rb)
+        self._mode_group.addButton(self._dark_rb)
+        layout.addWidget(self._light_rb)
+        layout.addWidget(self._dark_rb)
+
+        layout.addSpacing(8)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setProperty("class", "dialog-btn")
+        cancel_btn.clicked.connect(self._on_cancel)
         save_btn = QPushButton("Save && Close")
         save_btn.setProperty("class", "dialog-btn")
         save_btn.clicked.connect(self._save)
+        btn_row.addWidget(cancel_btn)
         btn_row.addWidget(save_btn)
         layout.addLayout(btn_row)
 
+    def _on_font_changed(self, font_name: str):
+        self.chosen_font = font_name
+        self.font_changed.emit(font_name)
+        # Update radio button colors to match current palette
+        self._refresh_radio_colors()
+
+    def _on_dark_changed(self, dark: bool):
+        self.chosen_dark = dark
+        self.dark_mode_changed.emit(dark)
+        self._refresh_radio_colors()
+
+    def _refresh_radio_colors(self):
+        """Update font radio button colors after theme change."""
+        for btn in self._font_group.buttons():
+            name = btn.text()
+            opts = FONT_OPTIONS[name]
+            btn.setStyleSheet(
+                f"QRadioButton {{ font-family: '{opts['family']}'; "
+                f"font-size: {opts['size'] - 1}pt; color: {PALETTE['text']}; }}"
+            )
+
+    def _on_cancel(self):
+        self.font_changed.emit(self._original_font)
+        self.dark_mode_changed.emit(self._original_dark)
+        self.chosen_font = self._original_font
+        self.chosen_dark = self._original_dark
+        self.reject()
+
     def _save(self):
-        self.chosen_font = self.combo.currentText()
         self.accept()
 
 
@@ -590,12 +745,13 @@ class FeedbackDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
+        link_color = PALETTE["text"]
         body = QLabel(
             "We'd love to hear from you! If you have a feature request, "
             "a bug to report, or anything else on your mind, get in touch "
             "with our team at "
-            "<a href='mailto:missing.sharpie404@passfwd.com' "
-            "style='color: #1a1a1a;'>missing.sharpie404@passfwd.com</a>."
+            f"<a href='mailto:missing.sharpie404@passfwd.com' "
+            f"style='color: {link_color};'>missing.sharpie404@passfwd.com</a>."
         )
         body.setProperty("class", "dialog-body")
         body.setWordWrap(True)
@@ -658,7 +814,7 @@ class ExportDialog(QDialog):
             msg = QMessageBox(self)
             msg.setWindowTitle("Exported")
             msg.setText(f"Text saved to:\n{dest}")
-            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            msg.setStyleSheet(msgbox_stylesheet())
             msg.exec()
 
     def _export_csv(self):
@@ -672,7 +828,7 @@ class ExportDialog(QDialog):
             msg = QMessageBox(self)
             msg.setWindowTitle("Exported")
             msg.setText(f"CSV saved to:\n{dest}")
-            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            msg.setStyleSheet(msgbox_stylesheet())
             msg.exec()
 
 
@@ -692,14 +848,15 @@ class PlainTextEditor(QTextEdit):
 class Toast(QLabel):
     """A small non-blocking notification that fades away."""
 
-    def __init__(self, message: str, parent: QWidget):
+    def __init__(self, message: str, parent: QWidget, font_family: str = "Atkinson Hyperlegible Next", font_size: int = 14):
         super().__init__(message, parent)
         self.setStyleSheet(
             f"background-color: {PALETTE['toast_bg']}; "
             f"color: {PALETTE['text']}; "
+            f"font-family: '{font_family}'; "
+            f"font-size: {font_size - 1}pt; "
             "padding: 8px 16px; "
             "border-radius: 4px; "
-            "font-size: 11pt;"
         )
         self.adjustSize()
         self._reposition(parent)
@@ -756,12 +913,14 @@ class LaunchWindow(QMainWindow):
         import_btn.clicked.connect(self._on_import)
         layout.addWidget(import_btn, alignment=Qt.AlignCenter)
 
-        fo = FONT_OPTIONS["Sans Serif"]
+        settings = load_settings()
+        apply_palette(settings.get("dark_mode", False))
+        fo = FONT_OPTIONS[settings.get("font", "Sans Serif")]
         self.setStyleSheet(launch_stylesheet(fo["family"], fo["size"]))
 
     def _on_new_project(self):
         dlg = NewProjectDialog(self)
-        fo  = FONT_OPTIONS["Sans Serif"]
+        fo  = FONT_OPTIONS[load_settings().get("font", "Sans Serif")]
         dlg.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
         if dlg.exec() == QDialog.Accepted:
             self._chosen_project = dlg.project_name
@@ -796,7 +955,7 @@ class LaunchWindow(QMainWindow):
             msg = QMessageBox(self)
             msg.setWindowTitle("Invalid Project")
             msg.setText("Please select a valid .onward project folder.")
-            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            msg.setStyleSheet(msgbox_stylesheet())
             msg.exec()
 
     def _on_import(self):
@@ -821,7 +980,7 @@ class LaunchWindow(QMainWindow):
                     msg = QMessageBox(self)
                     msg.setWindowTitle("Import Error")
                     msg.setText("CSV file is not in a valid Onward format.")
-                    msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+                    msg.setStyleSheet(msgbox_stylesheet())
                     msg.exec()
                     return
 
@@ -862,7 +1021,10 @@ class MainWindow(QMainWindow):
         self._project_name = project_name
         self.setWindowTitle(f"Onward — {project_name}")
         self.setMinimumSize(WINDOW_MIN_W, WINDOW_MIN_H)
-        self._current_font = "Sans Serif"
+        settings = load_settings()
+        self._current_font = settings.get("font", "Sans Serif")
+        self._dark_mode = settings.get("dark_mode", False)
+        apply_palette(self._dark_mode)
         self._unsaved = False
 
         # Autosave timer — writes every 3 minutes
@@ -903,7 +1065,7 @@ class MainWindow(QMainWindow):
             )
             msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
             msg.setDefaultButton(QMessageBox.Yes)
-            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            msg.setStyleSheet(msgbox_stylesheet())
             if msg.exec() == QMessageBox.Yes:
                 self._editor.setPlainText(recovered)
                 self._unsaved = True
@@ -938,7 +1100,7 @@ class MainWindow(QMainWindow):
         self._toggle_row.clicked.connect(self._toggle_sidebar)
         self._toggle_row.setStyleSheet(
             f"QPushButton {{ background: transparent; border: none; "
-            f"color: {PALETTE['placeholder']}; font-size: 10pt; padding: 0; }}"
+            f"color: {PALETTE['placeholder']}; padding: 0; }}"
             f"QPushButton:hover {{ color: {PALETTE['text']}; }}"
         )
         self._toggle_row.adjustSize()
@@ -1084,12 +1246,17 @@ class MainWindow(QMainWindow):
         self._toggle_row.setStyleSheet(
             f"QPushButton {{ background: transparent; border: none; "
             f"color: {PALETTE['placeholder']}; font-family: '{fo['family']}'; "
-            f"font-size: 10pt; padding: 0; }}"
+            f"font-size: {fo['size'] - 1}pt; padding: 0; }}"
             f"QPushButton:hover {{ color: {PALETTE['text']}; }}"
         )
         self._toggle_row.adjustSize()
         # Reposition toggle row after font/size change
         self._reposition_overlay_elements()
+
+    def _apply_dark_mode(self, dark: bool):
+        self._dark_mode = dark
+        apply_palette(dark)
+        self._apply_font(self._current_font)
 
     # ── Sidebar state ─────────────────────────────────────────────────────────
 
@@ -1119,7 +1286,7 @@ class MainWindow(QMainWindow):
             msg.setText("You have an unsaved entry. Are you sure you want to quit?")
             msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
             msg.setDefaultButton(QMessageBox.No)
-            msg.setStyleSheet("QLabel { color: #1a1a1a; } QPushButton { color: #1a1a1a; background-color: #ebebeb; border: none; border-radius: 4px; padding: 6px 16px; }")
+            msg.setStyleSheet(msgbox_stylesheet())
             reply = msg.exec()
             if reply == QMessageBox.No:
                 event.ignore()
@@ -1156,10 +1323,23 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _on_settings(self):
-        dlg = SettingsDialog(self._current_font, self)
+        dlg = SettingsDialog(self._current_font, self._dark_mode, self)
         self._apply_dialog_style(dlg)
+
+        def on_font_changed(font_name):
+            self._apply_font(font_name)
+            self._apply_dialog_style(dlg)
+
+        def on_dark_changed(dark):
+            self._apply_dark_mode(dark)
+            self._apply_dialog_style(dlg)
+
+        dlg.font_changed.connect(on_font_changed)
+        dlg.dark_mode_changed.connect(on_dark_changed)
         if dlg.exec() == QDialog.Accepted:
             self._apply_font(dlg.chosen_font)
+            self._apply_dark_mode(dlg.chosen_dark)
+            save_settings({"font": dlg.chosen_font, "dark_mode": dlg.chosen_dark})
 
     def _on_feedback(self):
         dlg = FeedbackDialog(self)
@@ -1173,7 +1353,8 @@ class MainWindow(QMainWindow):
         dlg.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
 
     def _show_toast(self, message: str):
-        Toast(message, self.centralWidget())
+        fo = FONT_OPTIONS[self._current_font]
+        Toast(message, self.centralWidget(), fo["family"], fo["size"])
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
