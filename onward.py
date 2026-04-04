@@ -54,6 +54,8 @@ PALETTE_DARK = {
 
 # Active palette — toggled by dark mode setting
 PALETTE = PALETTE_LIGHT
+# Tracks current font for msgbox_stylesheet
+_current_app_font = "Sans Serif"
 
 SIDEBAR_WIDTH = 220
 WINDOW_MIN_W  = 860
@@ -88,7 +90,7 @@ def create_project(project_name: str) -> str | None:
 
 def load_settings() -> dict:
     """Load global app settings from settings.json, returning defaults if missing."""
-    defaults = {"font": "Sans Serif", "dark_mode": False}
+    defaults = {"font": "Sans Serif", "dark_mode": False, "sidebar_introduced": False}
     try:
         import json
         with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
@@ -97,6 +99,8 @@ def load_settings() -> dict:
                 data["font"] = defaults["font"]
             if "dark_mode" not in data:
                 data["dark_mode"] = defaults["dark_mode"]
+            if "sidebar_introduced" not in data:
+                data["sidebar_introduced"] = defaults["sidebar_introduced"]
             return data
     except Exception:
         return defaults
@@ -120,12 +124,18 @@ def apply_palette(dark: bool):
 
 
 def msgbox_stylesheet() -> str:
-    """Returns a QMessageBox stylesheet using the current palette."""
+    """Returns a QMessageBox stylesheet using the current palette and font."""
     p = PALETTE
+    # Use the current font if available, otherwise fall back to default
+    try:
+        fo = FONT_OPTIONS[_current_app_font]
+        font_css = f"font-family: '{fo['family']}'; font-size: {fo['size'] - 1}pt;"
+    except Exception:
+        font_css = ""
     return (
-        f"QLabel {{ color: {p['text']}; }} "
+        f"QLabel {{ color: {p['text']}; {font_css} }} "
         f"QPushButton {{ color: {p['text']}; background-color: {p['btn_bg']}; "
-        f"border: none; border-radius: 4px; padding: 6px 16px; }} "
+        f"border: none; border-radius: 4px; padding: 6px 16px; {font_css} }} "
         f"QPushButton:hover {{ background-color: {p['btn_hover']}; }} "
         f"QMessageBox {{ background-color: {p['bg']}; }}"
     )
@@ -602,13 +612,35 @@ class AddSummaryDialog(QDialog):
         btn_row.addStretch()
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setProperty("class", "dialog-btn")
-        cancel_btn.clicked.connect(self.reject)
+        cancel_btn.clicked.connect(self._on_cancel)
         submit_btn = QPushButton("Submit")
         submit_btn.setProperty("class", "dialog-btn")
         submit_btn.clicked.connect(self._on_submit)
         btn_row.addWidget(cancel_btn)
         btn_row.addWidget(submit_btn)
         layout.addLayout(btn_row)
+
+    def _confirm_cancel(self) -> bool:
+        """Ask for confirmation if the user has typed a summary."""
+        if not self.text_edit.toPlainText().strip():
+            return True
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Discard Summary")
+        msg.setText("Are you sure you want to cancel? Your summary will be lost.")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+        msg.setStyleSheet(msgbox_stylesheet())
+        return msg.exec() == QMessageBox.Yes
+
+    def closeEvent(self, event):
+        if self._confirm_cancel():
+            event.accept()
+        else:
+            event.ignore()
+
+    def _on_cancel(self):
+        if self._confirm_cancel():
+            self.reject()
 
     def _enforce_limit(self):
         text = self.text_edit.toPlainText()
@@ -1026,6 +1058,12 @@ class MainWindow(QMainWindow):
         self._dark_mode = settings.get("dark_mode", False)
         apply_palette(self._dark_mode)
         self._unsaved = False
+        self._going_home = False
+        # Start sidebar open on first ever launch so users discover Submit & Clear
+        self._start_open = not settings.get("sidebar_introduced", False)
+        if self._start_open:
+            settings["sidebar_introduced"] = True
+            save_settings(settings)
 
         # Autosave timer — writes every 3 minutes
         self._autosave_timer = QTimer(self)
@@ -1040,6 +1078,10 @@ class MainWindow(QMainWindow):
         # Force a second font refresh after the event loop starts to ensure
         # custom fonts are fully loaded and metrics are correct
         QTimer.singleShot(0, lambda: self._apply_font(self._current_font))
+
+        # Open sidebar on first ever launch so users discover Submit & Clear
+        if self._start_open:
+            QTimer.singleShot(100, self._toggle_sidebar)
 
         if preload_text:
             self._editor.setPlainText(preload_text)
@@ -1127,6 +1169,7 @@ class MainWindow(QMainWindow):
         self._btn_export   = self._sidebar_button("Export Work")
         self._btn_feedback = self._sidebar_button("Send Feedback")
         self._btn_settings = self._sidebar_button("Settings")
+        self._btn_home     = self._sidebar_button("Home")
 
         for btn in [self._btn_submit, self._btn_view, self._btn_export]:
             sidebar_layout.addWidget(btn)
@@ -1134,12 +1177,14 @@ class MainWindow(QMainWindow):
         sidebar_layout.addStretch()
         sidebar_layout.addWidget(self._btn_feedback)
         sidebar_layout.addWidget(self._btn_settings)
+        sidebar_layout.addWidget(self._btn_home)
 
         self._btn_submit.clicked.connect(self._on_submit)
         self._btn_view.clicked.connect(self._on_view_summary)
         self._btn_export.clicked.connect(self._on_export)
         self._btn_feedback.clicked.connect(self._on_feedback)
         self._btn_settings.clicked.connect(self._on_settings)
+        self._btn_home.clicked.connect(self._on_home)
 
         # Root layout — just the main area, sidebar overlays on top
         root = QVBoxLayout(central)
@@ -1239,6 +1284,8 @@ class MainWindow(QMainWindow):
     # ── Font / style ──────────────────────────────────────────────────────────
 
     def _apply_font(self, font_name: str):
+        global _current_app_font
+        _current_app_font = font_name
         self._current_font = font_name
         fo = FONT_OPTIONS[font_name]
         self.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
@@ -1279,18 +1326,25 @@ class MainWindow(QMainWindow):
     def _on_text_changed(self):
         self._unsaved = bool(self._editor.toPlainText())
 
+    def _confirm_leave(self) -> bool:
+        """Show unsaved entry confirmation. Returns True if user confirms leaving."""
+        if not self._unsaved:
+            return True
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Unsaved Entry")
+        msg.setText("You have an unsaved entry. Are you sure you want to quit?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+        msg.setStyleSheet(msgbox_stylesheet())
+        return msg.exec() == QMessageBox.Yes
+
     def closeEvent(self, event: QCloseEvent):
-        if self._unsaved:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Unsaved Entry")
-            msg.setText("You have an unsaved entry. Are you sure you want to quit?")
-            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-            msg.setDefaultButton(QMessageBox.No)
-            msg.setStyleSheet(msgbox_stylesheet())
-            reply = msg.exec()
-            if reply == QMessageBox.No:
-                event.ignore()
-                return
+        if self._going_home:
+            event.accept()
+            return
+        if not self._confirm_leave():
+            event.ignore()
+            return
         delete_autosave(self._project_name)
         self._autosave_timer.stop()
         event.accept()
@@ -1345,6 +1399,17 @@ class MainWindow(QMainWindow):
         dlg = FeedbackDialog(self)
         self._apply_dialog_style(dlg)
         dlg.exec()
+
+    def _on_home(self):
+        if not self._confirm_leave():
+            return
+        delete_autosave(self._project_name)
+        self._autosave_timer.stop()
+        self._going_home = True
+        app = QApplication.instance()
+        app.launch = LaunchWindow()
+        app.launch.show()
+        self.close()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
