@@ -62,6 +62,7 @@ _current_app_font = "Sans Serif"
 SIDEBAR_WIDTH = 220
 WINDOW_MIN_W  = 860
 WINDOW_MIN_H  = 580
+BTN_SPACING   = 8  # Consistent spacing between buttons — used on launch screen and sidebar
 
 
 # ── Project path helpers ──────────────────────────────────────────────────────
@@ -289,7 +290,6 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
         border: none;
         border-radius: 4px;
         padding: 6px 12px;
-        min-height: 1.8em;
         font-family: "{font_family}";
         font-size: {font_size - 1}pt;
         text-align: center;
@@ -404,13 +404,14 @@ def launch_stylesheet(font_family: str, font_size: int) -> str:
     p = PALETTE
     return f"""
     QWidget#launchWidget {{
-        background-color: {p['bg']};
+        background-color: {p['sidebar_bg']};
     }}
     QLabel#launchTitle {{
         color: {p['text']};
         font-family: "{font_family}";
         font-size: {font_size + 6}pt;
         font-weight: bold;
+        background: transparent;
     }}
     QPushButton.launch-btn {{
         background-color: {p['btn_bg']};
@@ -418,10 +419,8 @@ def launch_stylesheet(font_family: str, font_size: int) -> str:
         border: none;
         border-radius: 4px;
         padding: 8px 24px;
-        min-height: 1.8em;
         font-family: "{font_family}";
-        font-size: {font_size}pt;
-        min-width: 160px;
+        font-size: {font_size - 1}pt;
     }}
     QPushButton.launch-btn:hover   {{ background-color: {p['btn_hover']}; }}
     QPushButton.launch-btn:pressed {{ background-color: {p['btn_pressed']}; }}
@@ -909,7 +908,22 @@ class Toast(QLabel):
         self.raise_()
 
 
-# ── Launch screen ─────────────────────────────────────────────────────────────
+class RoundedCard(QWidget):
+    """A widget that paints its own rounded rectangle background."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_StyledBackground, False)
+
+    def paintEvent(self, event):
+        from PySide6.QtGui import QPainter, QColor, QPainterPath
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(self.rect(), 12, 12)
+        painter.fillPath(path, QColor(PALETTE["sidebar_bg"]))
+        painter.end()
+
+
 
 class LaunchWindow(QMainWindow):
     """New Project / Open Project screen shown on every launch."""
@@ -917,7 +931,7 @@ class LaunchWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Onward")
-        self.setFixedSize(400, 280)
+        self.setFixedSize(420, 280)
         self._chosen_project = None
 
         central = QWidget()
@@ -925,31 +939,38 @@ class LaunchWindow(QMainWindow):
         self.setCentralWidget(central)
 
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(50, 50, 50, 50)
-        layout.setSpacing(16)
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setContentsMargins(40, 36, 40, 36)
+        layout.setSpacing(BTN_SPACING)
 
         title = QLabel("Onward")
         title.setObjectName("launchTitle")
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
-
-        layout.addSpacing(8)
+        layout.addSpacing(16)
 
         new_btn = QPushButton("New Project")
         new_btn.setProperty("class", "launch-btn")
+        new_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        new_btn.setFixedSize(SIDEBAR_WIDTH - 32, 34)
+        new_btn.setFlat(True)
         new_btn.clicked.connect(self._on_new_project)
-        layout.addWidget(new_btn, alignment=Qt.AlignCenter)
+        layout.addWidget(new_btn, alignment=Qt.AlignHCenter)
 
         open_btn = QPushButton("Open Project")
         open_btn.setProperty("class", "launch-btn")
+        open_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        open_btn.setFixedSize(SIDEBAR_WIDTH - 32, 34)
+        open_btn.setFlat(True)
         open_btn.clicked.connect(self._on_open_project)
-        layout.addWidget(open_btn, alignment=Qt.AlignCenter)
+        layout.addWidget(open_btn, alignment=Qt.AlignHCenter)
 
         import_btn = QPushButton("Import")
         import_btn.setProperty("class", "launch-btn")
+        import_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        import_btn.setFixedSize(SIDEBAR_WIDTH - 32, 34)
+        import_btn.setFlat(True)
         import_btn.clicked.connect(self._on_import)
-        layout.addWidget(import_btn, alignment=Qt.AlignCenter)
+        layout.addWidget(import_btn, alignment=Qt.AlignHCenter)
 
         settings = load_settings()
         apply_palette(settings.get("dark_mode", False))
@@ -1162,7 +1183,7 @@ class MainWindow(QMainWindow):
 
         sidebar_layout = QVBoxLayout(self._sidebar_widget)
         sidebar_layout.setContentsMargins(16, 48, 16, 20)
-        sidebar_layout.setSpacing(8)
+        sidebar_layout.setSpacing(BTN_SPACING)
         self._word_count_lbl = QLabel()
         self._word_count_lbl.setObjectName("wordCountLabel")
         self._word_count_lbl.setWordWrap(True)
@@ -1283,6 +1304,7 @@ class MainWindow(QMainWindow):
     def _sidebar_button(self, text: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setProperty("class", "sidebar-btn")
+        btn.setFixedHeight(34)
         btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return btn
 
