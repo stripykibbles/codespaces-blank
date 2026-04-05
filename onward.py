@@ -23,9 +23,9 @@ SETTINGS_PATH = os.path.join(ONWARD_DIR, "settings.json")
 BASE_FONT_SIZE = 14  # Universal font size — increase for Large Print support
 
 FONT_OPTIONS = {
-    "Sans Serif":  {"family": "Atkinson Hyperlegible Next", "size": BASE_FONT_SIZE},
-    "Serif":       {"family": "Crimson Text",               "size": BASE_FONT_SIZE},
-    "Monospace":   {"family": "Courier Prime",              "size": BASE_FONT_SIZE},
+    "Sans Serif":  {"family": "IBM Plex Sans",  "size": BASE_FONT_SIZE},
+    "Serif":       {"family": "IBM Plex Serif", "size": BASE_FONT_SIZE},
+    "Monospace":   {"family": "IBM Plex Mono",  "size": BASE_FONT_SIZE},
 }
 
 PALETTE_LIGHT = {
@@ -886,7 +886,7 @@ class PlainTextEditor(QTextEdit):
 class Toast(QLabel):
     """A small non-blocking notification that fades away."""
 
-    def __init__(self, message: str, parent: QWidget, font_family: str = "Atkinson Hyperlegible Next", font_size: int = 14):
+    def __init__(self, message: str, parent: QWidget, font_family: str = "IBM Plex Sans", font_size: int = 14):
         super().__init__(message, parent)
         self.setStyleSheet(
             f"background-color: {PALETTE['toast_bg']}; "
@@ -1447,18 +1447,18 @@ def main():
     base_dir = getattr(_sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     font_dir = os.path.join(base_dir, "fonts")
     for font_file in [
-        "AtkinsonHyperlegibleNext-Regular.ttf",
-        "AtkinsonHyperlegibleNext-Bold.ttf",
-        "AtkinsonHyperlegibleNext-RegularItalic.ttf",
-        "AtkinsonHyperlegibleNext-BoldItalic.ttf",
-        "CrimsonText-Regular.ttf",
-        "CrimsonText-Bold.ttf",
-        "CrimsonText-Italic.ttf",
-        "CrimsonText-BoldItalic.ttf",
-        "CourierPrime-Regular.ttf",
-        "CourierPrime-Bold.ttf",
-        "CourierPrime-Italic.ttf",
-        "CourierPrime-BoldItalic.ttf",
+        "IBMPlexSans-Regular.ttf",
+        "IBMPlexSans-Bold.ttf",
+        "IBMPlexSans-Italic.ttf",
+        "IBMPlexSans-BoldItalic.ttf",
+        "IBMPlexSerif-Regular.ttf",
+        "IBMPlexSerif-Bold.ttf",
+        "IBMPlexSerif-Italic.ttf",
+        "IBMPlexSerif-BoldItalic.ttf",
+        "IBMPlexMono-Regular.ttf",
+        "IBMPlexMono-Bold.ttf",
+        "IBMPlexMono-Italic.ttf",
+        "IBMPlexMono-BoldItalic.ttf",
     ]:
         QFontDatabase.addApplicationFont(os.path.join(font_dir, font_file))
 
