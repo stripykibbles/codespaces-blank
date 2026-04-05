@@ -6,7 +6,6 @@ import json
 import platform
 import shutil
 import warnings
-import urllib.parse
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -846,8 +845,7 @@ class ExportDialog(QDialog):
             msg.exec()
 
     def _export_csv(self):
-        from datetime import datetime as dt
-        timestamp = dt.now().strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         default_name = f"{self._project_name}-{timestamp}.csv"
         dest, _ = QFileDialog.getSaveFileName(self, "Save CSV File", default_name, "CSV Files (*.csv)")
         if dest:
@@ -857,7 +855,6 @@ class ExportDialog(QDialog):
             msg.setText(f"CSV saved to:\n{dest}")
             msg.setStyleSheet(msgbox_stylesheet())
             msg.exec()
-
 
 
 # ── Plain text editor ─────────────────────────────────────────────────────────
