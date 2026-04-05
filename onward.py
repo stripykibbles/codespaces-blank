@@ -289,6 +289,7 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
         border: none;
         border-radius: 4px;
         padding: 9px 12px;
+        min-height: 2em;
         font-family: "{font_family}";
         font-size: {font_size - 1}pt;
         text-align: center;
@@ -343,6 +344,7 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
         border: none;
         border-radius: 4px;
         padding: 6px 16px;
+        min-height: 2em;
         font-family: "{font_family}";
         font-size: {font_size - 1}pt;
     }}
@@ -401,7 +403,7 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
 def launch_stylesheet(font_family: str, font_size: int) -> str:
     p = PALETTE
     return f"""
-    QMainWindow, QWidget#launchWidget {{
+    QWidget#launchWidget {{
         background-color: {p['bg']};
     }}
     QLabel#launchTitle {{
@@ -416,6 +418,7 @@ def launch_stylesheet(font_family: str, font_size: int) -> str:
         border: none;
         border-radius: 4px;
         padding: 12px 24px;
+        min-height: 2em;
         font-family: "{font_family}";
         font-size: {font_size}pt;
         min-width: 160px;
@@ -442,6 +445,7 @@ def launch_stylesheet(font_family: str, font_size: int) -> str:
         border: none;
         border-radius: 4px;
         padding: 6px 16px;
+        min-height: 2em;
         font-family: "{font_family}";
         font-size: {font_size - 1}pt;
     }}
