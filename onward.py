@@ -1445,8 +1445,7 @@ def main():
 
     # Load bundled fonts from the fonts/ directory
     # sys._MEIPASS is set by PyInstaller when running as a bundled app
-    import sys as _sys
-    base_dir = getattr(_sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     font_dir = os.path.join(base_dir, "fonts")
     for font_file in [
         "IBMPlexSans-Regular.ttf",
