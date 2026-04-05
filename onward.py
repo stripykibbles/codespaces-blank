@@ -2,6 +2,11 @@ import sys
 import csv
 import os
 import re
+import json
+import platform
+import shutil
+import warnings
+import urllib.parse
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -10,8 +15,8 @@ from PySide6.QtWidgets import (
     QSizePolicy, QFrame, QScrollArea, QMessageBox, QLineEdit, QCheckBox,
     QRadioButton, QButtonGroup
 )
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve
-from PySide6.QtGui import QFontDatabase, QCloseEvent
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve, QUrl
+from PySide6.QtGui import QFontDatabase, QCloseEvent, QPainter, QColor, QPainterPath, QDesktopServices
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -74,9 +79,6 @@ def project_bundle(project_name: str) -> str:
 def csv_path(project_name: str) -> str:
     return os.path.join(project_bundle(project_name), f"{project_name}.csv")
 
-def txt_path(project_name: str) -> str:
-    return os.path.join(project_bundle(project_name), f"{project_name}.txt")
-
 def autosave_path(project_name: str) -> str:
     return os.path.join(project_bundle(project_name), "autosave.tmp")
 
@@ -95,7 +97,6 @@ def load_settings() -> dict:
     """Load global app settings from settings.json, returning defaults if missing."""
     defaults = {"font": "Sans Serif", "dark_mode": False, "sidebar_introduced": False}
     try:
-        import json
         with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
             if data.get("font") not in FONT_OPTIONS:
@@ -112,7 +113,6 @@ def load_settings() -> dict:
 def save_settings(settings: dict):
     """Save global app settings to settings.json."""
     try:
-        import json
         os.makedirs(ONWARD_DIR, exist_ok=True)
         with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=2)
@@ -375,13 +375,6 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
     QCheckBox::indicator, QRadioButton::indicator {{
         width: 16px;
         height: 16px;
-    }}
-    QComboBox QAbstractItemView {{
-        background-color: {p['btn_bg']};
-        color: {p['text']};
-        selection-background-color: {p['btn_hover']};
-        selection-color: {p['text']};
-        border: 1px solid {p['border']};
     }}
     QScrollArea, QScrollArea > QWidget > QWidget {{
         background-color: {p['bg']};
@@ -806,8 +799,6 @@ class FeedbackDialog(QDialog):
         layout.addWidget(close_btn, alignment=Qt.AlignRight)
 
     def _open_mail(self, url: str):
-        from PySide6.QtGui import QDesktopServices
-        from PySide6.QtCore import QUrl
         QDesktopServices.openUrl(QUrl(url))
 
 
@@ -860,7 +851,6 @@ class ExportDialog(QDialog):
         default_name = f"{self._project_name}-{timestamp}.csv"
         dest, _ = QFileDialog.getSaveFileName(self, "Save CSV File", default_name, "CSV Files (*.csv)")
         if dest:
-            import shutil
             shutil.copy2(csv_path(self._project_name), dest)
             msg = QMessageBox(self)
             msg.setWindowTitle("Exported")
@@ -915,7 +905,6 @@ class RoundedCard(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, False)
 
     def paintEvent(self, event):
-        from PySide6.QtGui import QPainter, QColor, QPainterPath
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
@@ -948,27 +937,15 @@ class LaunchWindow(QMainWindow):
         layout.addWidget(title)
         layout.addSpacing(16)
 
-        new_btn = QPushButton("New Project")
-        new_btn.setProperty("class", "launch-btn")
-        new_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        new_btn.setFixedSize(SIDEBAR_WIDTH - 32, 34)
-        new_btn.setFlat(True)
+        new_btn = self._launch_button("New Project")
         new_btn.clicked.connect(self._on_new_project)
         layout.addWidget(new_btn, alignment=Qt.AlignHCenter)
 
-        open_btn = QPushButton("Open Project")
-        open_btn.setProperty("class", "launch-btn")
-        open_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        open_btn.setFixedSize(SIDEBAR_WIDTH - 32, 34)
-        open_btn.setFlat(True)
+        open_btn = self._launch_button("Open Project")
         open_btn.clicked.connect(self._on_open_project)
         layout.addWidget(open_btn, alignment=Qt.AlignHCenter)
 
-        import_btn = QPushButton("Import")
-        import_btn.setProperty("class", "launch-btn")
-        import_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        import_btn.setFixedSize(SIDEBAR_WIDTH - 32, 34)
-        import_btn.setFlat(True)
+        import_btn = self._launch_button("Import")
         import_btn.clicked.connect(self._on_import)
         layout.addWidget(import_btn, alignment=Qt.AlignHCenter)
 
@@ -976,6 +953,14 @@ class LaunchWindow(QMainWindow):
         apply_palette(settings.get("dark_mode", False))
         fo = FONT_OPTIONS[settings.get("font", "Sans Serif")]
         self.setStyleSheet(launch_stylesheet(fo["family"], fo["size"]))
+
+    def _launch_button(self, text: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setProperty("class", "launch-btn")
+        btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        btn.setFixedSize(SIDEBAR_WIDTH - 32, 34)
+        btn.setFlat(True)
+        return btn
 
     def _on_new_project(self):
         dlg = NewProjectDialog(self)
@@ -988,7 +973,6 @@ class LaunchWindow(QMainWindow):
     def _on_open_project(self):
         os.makedirs(ONWARD_DIR, exist_ok=True)
 
-        import platform
         if platform.system() == "Darwin":
             # On Mac, .onward bundles are registered file types — use native picker
             path, _ = QFileDialog.getOpenFileName(
@@ -1045,7 +1029,7 @@ class LaunchWindow(QMainWindow):
 
         # Step 3: ask for project name
         dlg = NewProjectDialog(self)
-        fo  = FONT_OPTIONS["Sans Serif"]
+        fo  = FONT_OPTIONS[load_settings().get("font", "Sans Serif")]
         dlg.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
         if dlg.exec() != QDialog.Accepted:
             return
@@ -1255,7 +1239,6 @@ class MainWindow(QMainWindow):
         self._toggle_row.raise_()
 
     def _toggle_sidebar(self):
-        import warnings
         h = self.centralWidget().height()
         w = self.centralWidget().width()
         if self._sidebar_open:
@@ -1421,6 +1404,9 @@ class MainWindow(QMainWindow):
             self._apply_font(dlg.chosen_font)
             self._apply_dark_mode(dlg.chosen_dark)
             save_settings({"font": dlg.chosen_font, "dark_mode": dlg.chosen_dark})
+        # On Cancel, _on_cancel() already reverts font/dark mode in memory.
+        # We intentionally do not save on cancel — the reverted state is correct
+        # for the current session and will be re-read from disk on next launch.
 
     def _on_feedback(self):
         dlg = FeedbackDialog(self)
@@ -1457,9 +1443,6 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Onward")
     app.setStyleSheet("QToolTip { color: #1a1a1a; background-color: #f8f8f8; border: 1px solid #e4e4e4; }")
-
-    from PySide6.QtWidgets import QToolTip
-    from PySide6.QtCore import QTimer
     # Reduce tooltip delay from Qt default (~700ms) to 150ms
     app.setProperty("toolTipDelay", 150)
 
