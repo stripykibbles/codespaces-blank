@@ -20,10 +20,12 @@ FIELDNAMES    = ["date", "time", "entry", "entry_word_count", "summary"]
 ONWARD_DIR    = os.path.join(os.path.expanduser("~"), "Documents", "Onward")
 SETTINGS_PATH = os.path.join(ONWARD_DIR, "settings.json")
 
+BASE_FONT_SIZE = 14  # Universal font size — increase for Large Print support
+
 FONT_OPTIONS = {
-    "Sans Serif":  {"family": "Atkinson Hyperlegible Next", "size": 14},
-    "Serif":       {"family": "Crimson Text",               "size": 15},
-    "Monospace":   {"family": "Courier Prime",              "size": 13},
+    "Sans Serif":  {"family": "Atkinson Hyperlegible Next", "size": BASE_FONT_SIZE},
+    "Serif":       {"family": "Crimson Text",               "size": BASE_FONT_SIZE},
+    "Monospace":   {"family": "Courier Prime",              "size": BASE_FONT_SIZE},
 }
 
 PALETTE_LIGHT = {
@@ -286,7 +288,7 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
         color: {p['text']};
         border: none;
         border-radius: 4px;
-        padding: 7px 12px;
+        padding: 9px 12px;
         font-family: "{font_family}";
         font-size: {font_size - 1}pt;
         text-align: center;
@@ -399,7 +401,7 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
 def launch_stylesheet(font_family: str, font_size: int) -> str:
     p = PALETTE
     return f"""
-    QWidget#launchWidget {{
+    QMainWindow, QWidget#launchWidget {{
         background-color: {p['bg']};
     }}
     QLabel#launchTitle {{
@@ -413,7 +415,7 @@ def launch_stylesheet(font_family: str, font_size: int) -> str:
         color: {p['text']};
         border: none;
         border-radius: 4px;
-        padding: 10px 24px;
+        padding: 12px 24px;
         font-family: "{font_family}";
         font-size: {font_size}pt;
         min-width: 160px;
@@ -690,10 +692,10 @@ class SettingsDialog(QDialog):
         for name, opts in FONT_OPTIONS.items():
             rb = QRadioButton(name)
             rb.setChecked(name == current_font)
-            # Each option rendered in its own font
+            # Each option rendered in its own font as a preview, consistent size
             rb.setStyleSheet(
                 f"QRadioButton {{ font-family: '{opts['family']}'; "
-                f"font-size: {opts['size'] - 1}pt; color: {PALETTE['text']}; }}"
+                f"font-size: {BASE_FONT_SIZE - 1}pt; color: {PALETTE['text']}; }}"
             )
             rb.toggled.connect(lambda checked, n=name: self._on_font_changed(n) if checked else None)
             self._font_group.addButton(rb)
@@ -750,7 +752,7 @@ class SettingsDialog(QDialog):
             opts = FONT_OPTIONS[name]
             btn.setStyleSheet(
                 f"QRadioButton {{ font-family: '{opts['family']}'; "
-                f"font-size: {opts['size'] - 1}pt; color: {PALETTE['text']}; }}"
+                f"font-size: {BASE_FONT_SIZE - 1}pt; color: {PALETTE['text']}; }}"
             )
 
     def _on_cancel(self):
@@ -1278,7 +1280,6 @@ class MainWindow(QMainWindow):
         btn = QPushButton(text)
         btn.setProperty("class", "sidebar-btn")
         btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        btn.setFixedHeight(34)
         return btn
 
     # ── Font / style ──────────────────────────────────────────────────────────
