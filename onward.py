@@ -288,8 +288,8 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
         color: {p['text']};
         border: none;
         border-radius: 4px;
-        padding: 9px 12px;
-        min-height: 2em;
+        padding: 6px 12px;
+        min-height: 1.8em;
         font-family: "{font_family}";
         font-size: {font_size - 1}pt;
         text-align: center;
@@ -344,7 +344,7 @@ def base_stylesheet(font_family: str, font_size: int) -> str:
         border: none;
         border-radius: 4px;
         padding: 6px 16px;
-        min-height: 2em;
+        min-height: 1.8em;
         font-family: "{font_family}";
         font-size: {font_size - 1}pt;
     }}
@@ -417,8 +417,8 @@ def launch_stylesheet(font_family: str, font_size: int) -> str:
         color: {p['text']};
         border: none;
         border-radius: 4px;
-        padding: 12px 24px;
-        min-height: 2em;
+        padding: 8px 24px;
+        min-height: 1.8em;
         font-family: "{font_family}";
         font-size: {font_size}pt;
         min-width: 160px;
@@ -445,7 +445,7 @@ def launch_stylesheet(font_family: str, font_size: int) -> str:
         border: none;
         border-radius: 4px;
         padding: 6px 16px;
-        min-height: 2em;
+        min-height: 1.8em;
         font-family: "{font_family}";
         font-size: {font_size - 1}pt;
     }}
@@ -680,7 +680,7 @@ class SettingsDialog(QDialog):
         self._original_font = current_font
         self._original_dark = dark_mode
         self.setWindowTitle("Settings")
-        self.setFixedSize(300, 280)
+        self.setFixedSize(300, 310)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -917,7 +917,7 @@ class LaunchWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Onward")
-        self.setFixedSize(400, 260)
+        self.setFixedSize(400, 280)
         self._chosen_project = None
 
         central = QWidget()
