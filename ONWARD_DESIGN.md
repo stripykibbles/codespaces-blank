@@ -1,4 +1,4 @@
-g# Onward — Design Decisions
+# Onward — Design Decisions
 
 A living document capturing key design decisions for the Onward desktop app. Updated as decisions are made.
 
@@ -45,6 +45,18 @@ my-novel.onward/
     my-novel.csv        ← submitted entries
     autosave.tmp        ← crash recovery, only present mid-session
 ```
+
+---
+
+## Settings
+
+User preferences are saved globally to `~/Documents/Onward/settings.json` and applied on every launch. Settings are accessible via the Settings button in the sidebar and include:
+
+- **Font** — Sans Serif (IBM Plex Sans), Serif (IBM Plex Serif), Monospace (IBM Plex Mono). Each option is previewed in its own typeface.
+- **Size** — Small (12pt), Medium (16pt), Large (20pt). All UI elements scale uniformly with the selected size, including the editor, sidebar, and dialogs. Large Print support was added in response to a user with vision problems.
+- **Mode** — Light or Dark.
+
+All settings support live preview — changes are applied immediately and reverted if the user cancels.
 
 ---
 
@@ -106,7 +118,7 @@ Import is not available from within the main writing window — it is a launch-t
 
 ## Sidebar
 
-The sidebar is a right-side animated overlay panel, hidden by default, giving the writing area the full window width. The toggle row (`project-name >>`) floats on its own Z layer in the top-right corner of the writing area. Clicking it slides the sidebar in from the right and switches the text to `<< project-name`, left-aligned at the sidebar's left edge. Clicking anywhere outside the sidebar, or clicking the toggle row again, slides it back out. The animation uses `QPropertyAnimation` with an `OutCubic` easing curve.
+The sidebar is a right-side panel that pushes the writing area when open — the writing area shrinks to avoid overlap. The toggle row (`project-name >>`) floats on its own Z layer in the top-right corner of the writing area. Clicking it slides the sidebar in from the right and switches the text to `<< project-name`, left-aligned at the sidebar's left edge. Clicking anywhere outside the sidebar, or clicking the toggle row again, slides it back out. The animation uses `QPropertyAnimation` with an `OutCubic` easing curve, animating both the sidebar and the writing area simultaneously.
 
 The sidebar contains:
 - Word count
@@ -115,8 +127,11 @@ The sidebar contains:
 - Export Work (visible only after first submission)
 - Settings
 - Send Feedback (bottom-aligned, visually separated from action buttons)
+- Home (bottom-aligned, below Send Feedback and Settings)
 
 **Send Feedback** opens a mailto link to the app's feedback address. No third-party form service is used — the user's own mail client handles the interaction.
+
+**Home** returns the user to the launch screen (New Project / Open Project / Import). If the user has an unsaved entry, a confirmation dialog appears first. The current project is not affected — it remains in `~/Documents/Onward/` as its own `.onward` bundle.
 
 ---
 
@@ -153,6 +168,5 @@ Export CSV is distinct from the internal `.onward` format. It is a portable, hum
 
 ## Decisions Still Pending
 
-- Font options and dark mode — where do these live in the UI?
 - Should users have the option to have summaries generated automatically by AI, rather than writing them manually?
-- Should users be able to start a new project from within the main writing window (without having to quit and relaunch)? If so, where does this option live in the UI?
+- Should users be able to rename a project from within the app? A rename would need to rename the `.onward` bundle on disk, update any open file handles, and update the window title and toggle row.

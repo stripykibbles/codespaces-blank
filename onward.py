@@ -24,7 +24,13 @@ FIELDNAMES    = ["date", "time", "entry", "entry_word_count", "summary"]
 ONWARD_DIR    = os.path.join(os.path.expanduser("~"), "Documents", "Onward")
 SETTINGS_PATH = os.path.join(ONWARD_DIR, "settings.json")
 
-BASE_FONT_SIZE = 14  # Universal font size — increase for Large Print support
+FONT_SIZE_OPTIONS = {
+    "Small":  12,
+    "Medium": 16,
+    "Large":  20,
+}
+
+BASE_FONT_SIZE = 12  # Updated dynamically from settings on launch
 
 FONT_OPTIONS = {
     "Sans Serif":  {"family": "IBM Plex Sans",  "size": BASE_FONT_SIZE},
@@ -63,7 +69,7 @@ PALETTE = PALETTE_LIGHT
 # Tracks current font for msgbox_stylesheet
 _current_app_font = "Sans Serif"
 
-SIDEBAR_WIDTH = 220
+SIDEBAR_WIDTH = 240
 WINDOW_MIN_W  = 860
 WINDOW_MIN_H  = 580
 BTN_SPACING   = 8  # Consistent spacing between buttons — used on launch screen and sidebar
@@ -115,7 +121,7 @@ def create_project(project_name: str) -> str | None:
 
 def load_settings() -> dict:
     """Load global app settings from settings.json, returning defaults if missing."""
-    defaults = {"font": "Sans Serif", "dark_mode": False, "sidebar_introduced": False}
+    defaults = {"font": "Sans Serif", "dark_mode": False, "sidebar_introduced": False, "font_size": "Small"}
     try:
         with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -125,6 +131,8 @@ def load_settings() -> dict:
                 data["dark_mode"] = defaults["dark_mode"]
             if "sidebar_introduced" not in data:
                 data["sidebar_introduced"] = defaults["sidebar_introduced"]
+            if data.get("font_size") not in FONT_SIZE_OPTIONS:
+                data["font_size"] = defaults["font_size"]
             return data
     except Exception:
         return defaults
@@ -144,6 +152,14 @@ def apply_palette(dark: bool):
     """Switch the global PALETTE between light and dark."""
     global PALETTE
     PALETTE = PALETTE_DARK if dark else PALETTE_LIGHT
+
+
+def apply_font_size(size_name: str):
+    """Update BASE_FONT_SIZE and FONT_OPTIONS to reflect the chosen size."""
+    global BASE_FONT_SIZE
+    BASE_FONT_SIZE = FONT_SIZE_OPTIONS.get(size_name, 14)
+    for key in FONT_OPTIONS:
+        FONT_OPTIONS[key]["size"] = BASE_FONT_SIZE
 
 
 def msgbox_stylesheet() -> str:
@@ -475,7 +491,7 @@ class NewProjectDialog(QDialog):
         super().__init__(parent)
         self.project_name = ""
         self.setWindowTitle("New Project")
-        self.setFixedSize(360, 170)
+        self.setMinimumWidth(340)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -679,20 +695,23 @@ class AddSummaryDialog(QDialog):
 
 
 class SettingsDialog(QDialog):
-    """Settings with radio buttons for font and mode, with live preview."""
+    """Settings with radio buttons for font, size, and mode, with live preview."""
 
     from PySide6.QtCore import Signal
     font_changed = Signal(str)
     dark_mode_changed = Signal(bool)
+    font_size_changed = Signal(str)
 
-    def __init__(self, current_font: str, dark_mode: bool, parent=None):
+    def __init__(self, current_font: str, dark_mode: bool, current_size: str, parent=None):
         super().__init__(parent)
         self.chosen_font = current_font
         self.chosen_dark = dark_mode
+        self.chosen_size = current_size
         self._original_font = current_font
         self._original_dark = dark_mode
+        self._original_size = current_size
         self.setWindowTitle("Settings")
-        self.setFixedSize(300, 310)
+        self.setMinimumWidth(340)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -708,13 +727,27 @@ class SettingsDialog(QDialog):
         for name, opts in FONT_OPTIONS.items():
             rb = QRadioButton(name)
             rb.setChecked(name == current_font)
-            # Each option rendered in its own font as a preview, consistent size
             rb.setStyleSheet(
                 f"QRadioButton {{ font-family: '{opts['family']}'; "
                 f"font-size: {BASE_FONT_SIZE - 1}pt; color: {PALETTE['text']}; }}"
             )
             rb.toggled.connect(lambda checked, n=name: self._on_font_changed(n) if checked else None)
             self._font_group.addButton(rb)
+            layout.addWidget(rb)
+
+        layout.addSpacing(8)
+
+        # ── Size section ──────────────────────────────────────────────
+        size_lbl = QLabel("Size")
+        size_lbl.setProperty("class", "dialog-body")
+        layout.addWidget(size_lbl)
+
+        self._size_group = QButtonGroup(self)
+        for name in FONT_SIZE_OPTIONS:
+            rb = QRadioButton(name)
+            rb.setChecked(name == current_size)
+            rb.toggled.connect(lambda checked, n=name: self._on_size_changed(n) if checked else None)
+            self._size_group.addButton(rb)
             layout.addWidget(rb)
 
         layout.addSpacing(8)
@@ -753,7 +786,11 @@ class SettingsDialog(QDialog):
     def _on_font_changed(self, font_name: str):
         self.chosen_font = font_name
         self.font_changed.emit(font_name)
-        # Update radio button colors to match current palette
+        self._refresh_radio_colors()
+
+    def _on_size_changed(self, size_name: str):
+        self.chosen_size = size_name
+        self.font_size_changed.emit(size_name)
         self._refresh_radio_colors()
 
     def _on_dark_changed(self, dark: bool):
@@ -762,7 +799,7 @@ class SettingsDialog(QDialog):
         self._refresh_radio_colors()
 
     def _refresh_radio_colors(self):
-        """Update font radio button colors after theme change."""
+        """Update font radio button styles after theme or size change."""
         for btn in self._font_group.buttons():
             name = btn.text()
             opts = FONT_OPTIONS[name]
@@ -774,8 +811,10 @@ class SettingsDialog(QDialog):
     def _on_cancel(self):
         self.font_changed.emit(self._original_font)
         self.dark_mode_changed.emit(self._original_dark)
+        self.font_size_changed.emit(self._original_size)
         self.chosen_font = self._original_font
         self.chosen_dark = self._original_dark
+        self.chosen_size = self._original_size
         self.reject()
 
     def _save(self):
@@ -788,7 +827,8 @@ class FeedbackDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Send Feedback")
-        self.setFixedSize(360, 160)
+        self.setMinimumWidth(340)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -829,7 +869,7 @@ class ExportDialog(QDialog):
         super().__init__(parent)
         self._project_name = project_name
         self.setWindowTitle("Export Work")
-        self.setFixedSize(280, 130)
+        self.setMinimumWidth(300)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -838,10 +878,12 @@ class ExportDialog(QDialog):
 
         txt_btn = QPushButton("Export Text (.txt)")
         txt_btn.setProperty("class", "dialog-btn")
+        txt_btn.setFlat(True)
         txt_btn.clicked.connect(self._export_txt)
 
         csv_btn = QPushButton("Export Raw Data (.csv)")
         csv_btn.setProperty("class", "dialog-btn")
+        csv_btn.setFlat(True)
         csv_btn.clicked.connect(self._export_csv)
 
         layout.addWidget(txt_btn)
@@ -849,6 +891,7 @@ class ExportDialog(QDialog):
 
         close_btn = QPushButton("Close")
         close_btn.setProperty("class", "dialog-btn")
+        close_btn.setFlat(True)
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn, alignment=Qt.AlignRight)
 
@@ -938,7 +981,8 @@ class LaunchWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Onward")
-        self.setFixedSize(420, 280)
+        self.setMinimumWidth(420)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
         self._chosen_project = None
 
         central = QWidget()
@@ -969,6 +1013,7 @@ class LaunchWindow(QMainWindow):
 
         settings = load_settings()
         apply_palette(settings.get("dark_mode", False))
+        apply_font_size(settings.get("font_size", "Medium"))
         fo = FONT_OPTIONS[settings.get("font", "Sans Serif")]
         self.setStyleSheet(launch_stylesheet(fo["family"], fo["size"]))
 
@@ -976,7 +1021,7 @@ class LaunchWindow(QMainWindow):
         btn = QPushButton(text)
         btn.setProperty("class", "launch-btn")
         btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        btn.setFixedSize(SIDEBAR_WIDTH - 32, 34)
+        btn.setFixedWidth(SIDEBAR_WIDTH - 32)
         btn.setFlat(True)
         return btn
 
@@ -1085,7 +1130,9 @@ class MainWindow(QMainWindow):
         settings = load_settings()
         self._current_font = settings.get("font", "Sans Serif")
         self._dark_mode = settings.get("dark_mode", False)
+        self._font_size = settings.get("font_size", "Small")
         apply_palette(self._dark_mode)
+        apply_font_size(self._font_size)
         self._unsaved = False
         self._going_home = False
         # Start sidebar open on first ever launch so users discover Submit & Clear
@@ -1315,7 +1362,6 @@ class MainWindow(QMainWindow):
     def _sidebar_button(self, text: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setProperty("class", "sidebar-btn")
-        btn.setFixedHeight(34)
         btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return btn
 
@@ -1341,6 +1387,11 @@ class MainWindow(QMainWindow):
     def _apply_dark_mode(self, dark: bool):
         self._dark_mode = dark
         apply_palette(dark)
+        self._apply_font(self._current_font)
+
+    def _apply_font_size(self, size_name: str):
+        self._font_size = size_name
+        apply_font_size(size_name)
         self._apply_font(self._current_font)
 
     # ── Sidebar state ─────────────────────────────────────────────────────────
@@ -1415,7 +1466,7 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _on_settings(self):
-        dlg = SettingsDialog(self._current_font, self._dark_mode, self)
+        dlg = SettingsDialog(self._current_font, self._dark_mode, self._font_size, self)
         self._apply_dialog_style(dlg)
 
         def on_font_changed(font_name):
@@ -1426,13 +1477,23 @@ class MainWindow(QMainWindow):
             self._apply_dark_mode(dark)
             self._apply_dialog_style(dlg)
 
+        def on_size_changed(size_name):
+            self._apply_font_size(size_name)
+            self._apply_dialog_style(dlg)
+
         dlg.font_changed.connect(on_font_changed)
         dlg.dark_mode_changed.connect(on_dark_changed)
+        dlg.font_size_changed.connect(on_size_changed)
         if dlg.exec() == QDialog.Accepted:
             self._apply_font(dlg.chosen_font)
             self._apply_dark_mode(dlg.chosen_dark)
-            save_settings({"font": dlg.chosen_font, "dark_mode": dlg.chosen_dark})
-        # On Cancel, _on_cancel() already reverts font/dark mode in memory.
+            self._apply_font_size(dlg.chosen_size)
+            save_settings({
+                "font": dlg.chosen_font,
+                "dark_mode": dlg.chosen_dark,
+                "font_size": dlg.chosen_size,
+            })
+        # On Cancel, _on_cancel() already reverts font/dark mode/size in memory.
         # We intentionally do not save on cancel — the reverted state is correct
         # for the current session and will be re-read from disk on next launch.
 
