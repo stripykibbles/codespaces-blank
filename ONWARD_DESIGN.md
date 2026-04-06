@@ -166,7 +166,22 @@ Export CSV is distinct from the internal `.onward` format. It is a portable, hum
 
 ---
 
-## Decisions Still Pending
+## Future Considerations
 
-- Should users have the option to have summaries generated automatically by AI, rather than writing them manually?
-- Should users be able to rename a project from within the app? A rename would need to rename the `.onward` bundle on disk, update any open file handles, and update the window title and toggle row.
+**Project renaming** — Renaming a project from within the app would require renaming the `.onward` bundle on disk, updating any open file handles, and updating the window title and toggle row. Doable but non-trivial.
+
+**AI-generated summaries** — Users could optionally have summaries generated automatically by AI rather than writing them manually. Tabled for the long term.
+
+**Recent projects on the launch screen** — A short list of recently opened projects would reduce friction for daily users who work on one project consistently. The data is already on disk; it just needs tracking in `settings.json`.
+
+**Keyboard shortcuts** — A writing app should be fully keyboard-accessible. Submit, toggle sidebar, and Home at minimum. Qt's `QShortcut` makes this straightforward.
+
+**Summary dialog showing the entry** — Currently the user is asked to write a summary after submitting, but the entry they just wrote is no longer visible. A small scrollable preview of the entry inside the summary dialog would help users write better summaries without relying on short-term memory.
+
+**Sidebar toggle affordance** — The `project-name >>` clickable text is not immediately obvious to new users. A subtle icon (hamburger or chevron) alongside the text would make it more self-evidently interactive. An SVG asset would be needed.
+
+**Submit without summary (keyboard shortcut)** — A shortcut to submit with no summary, bypassing the dialog entirely, would reduce friction for power users writing daily. The "or not — that's okay, too!" copy in the dialog already acknowledges this friction.
+
+**Accent colour** — Everything is intentionally neutral grey, which suits the writing-first aesthetic. A single accent colour used very sparingly — perhaps just the Submit button — could add life and visually prioritise the most important action without compromising the minimalist feel. Worth revisiting.
+
+**Live word count** — A session word count visible in the editor as you type has been considered and deliberately set aside. The concern is that it encourages writers to think about their work quantitatively rather than qualitatively. Fifty hard-won words that unlock a story are worth more than five hundred easy ones, and a visible counter might make a productive session feel like a failure. If this is ever added, it should be a toggleable option in Settings, off by default.
