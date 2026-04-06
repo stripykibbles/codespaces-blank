@@ -118,7 +118,7 @@ Import is not available from within the main writing window — it is a launch-t
 
 ## Sidebar
 
-The sidebar is a right-side panel that pushes the writing area when open — the writing area shrinks to avoid overlap. The toggle row (`project-name >>`) floats on its own Z layer in the top-right corner of the writing area. Clicking it slides the sidebar in from the right and switches the text to `<< project-name`, left-aligned at the sidebar's left edge. Clicking anywhere outside the sidebar, or clicking the toggle row again, slides it back out. The animation uses `QPropertyAnimation` with an `OutCubic` easing curve, animating both the sidebar and the writing area simultaneously.
+The sidebar is a right-side panel that pushes the writing area when open — the writing area shrinks to avoid overlap. A pill-shaped chevron button (`❯❯` / `❮❮`) floats in the top-right corner of the writing area. It uses the same background, hover, and text colors as the sidebar buttons. Clicking it slides the sidebar in from the right; clicking anywhere outside the sidebar, or clicking the pill again, slides it back out. The animation uses `QPropertyAnimation` with an `OutCubic` easing curve, animating both the sidebar and the writing area simultaneously. The project name is shown in the window title bar rather than in the toggle itself.
 
 The sidebar contains:
 - Word count
@@ -177,8 +177,6 @@ Export CSV is distinct from the internal `.onward` format. It is a portable, hum
 **Keyboard shortcuts** — A writing app should be fully keyboard-accessible. Submit, toggle sidebar, and Home at minimum. Qt's `QShortcut` makes this straightforward.
 
 **Summary dialog showing the entry** — Currently the user is asked to write a summary after submitting, but the entry they just wrote is no longer visible. A small scrollable preview of the entry inside the summary dialog would help users write better summaries without relying on short-term memory.
-
-**Sidebar toggle affordance** — The `project-name >>` clickable text is not immediately obvious to new users. A subtle icon (hamburger or chevron) alongside the text would make it more self-evidently interactive. An SVG asset would be needed.
 
 **Submit without summary (keyboard shortcut)** — A shortcut to submit with no summary, bypassing the dialog entirely, would reduce friction for power users writing daily. The "or not — that's okay, too!" copy in the dialog already acknowledges this friction.
 

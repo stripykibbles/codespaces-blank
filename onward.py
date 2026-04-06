@@ -1212,16 +1212,17 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self._editor)
 
         # Toggle row — project name + >> in top-right, entire row is clickable
-        self._toggle_row = QPushButton(f"{self._project_name}  >>")
+        self._toggle_row = QPushButton("❯❯")
         self._toggle_row.setParent(central)
         self._toggle_row.setCursor(Qt.CursorShape.PointingHandCursor)
         self._toggle_row.clicked.connect(self._toggle_sidebar)
+        self._toggle_row.setFixedSize(36, 28)
         self._toggle_row.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none; "
-            f"color: {PALETTE['placeholder']}; padding: 0; }}"
-            f"QPushButton:hover {{ color: {PALETTE['text']}; }}"
+            f"QPushButton {{ background-color: {PALETTE['btn_bg']}; border: none; "
+            f"border-radius: 4px; color: {PALETTE['text']}; font-size: {BASE_FONT_SIZE - 1}pt; padding: 0; }}"
+            f"QPushButton:hover {{ background-color: {PALETTE['btn_hover']}; }}"
+            f"QPushButton:pressed {{ background-color: {PALETTE['btn_pressed']}; }}"
         )
-        self._toggle_row.adjustSize()
 
         # Sidebar overlays the writing area
         self._sidebar_widget = QWidget()
@@ -1287,17 +1288,15 @@ class MainWindow(QMainWindow):
         self._reposition_overlay_elements()
 
     def _reposition_overlay_elements(self):
-        """Position sidebar, toggle row, and resize main area correctly."""
+        """Position sidebar and toggle row correctly."""
         h = self.centralWidget().height()
         w = self.centralWidget().width()
 
         if self._sidebar_open:
-            self._toggle_row.adjustSize()
             self._toggle_row.move(w - SIDEBAR_WIDTH + 16, 12)
             self._main_area.setGeometry(0, 0, w - SIDEBAR_WIDTH, h)
             self._sidebar_widget.setGeometry(w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h)
         else:
-            self._toggle_row.adjustSize()
             self._toggle_row.move(w - self._toggle_row.width() - 16, 12)
             self._main_area.setGeometry(0, 0, w, h)
             self._sidebar_widget.setGeometry(w, 0, SIDEBAR_WIDTH, h)
@@ -1315,7 +1314,6 @@ class MainWindow(QMainWindow):
                     self._sidebar_anim.finished.disconnect()
                 except Exception:
                     pass
-            # Slide sidebar out, expand main area
             self._sidebar_anim.setStartValue(QRect(w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h))
             self._sidebar_anim.setEndValue(QRect(w, 0, SIDEBAR_WIDTH, h))
             self._sidebar_anim.finished.connect(lambda: self._sidebar_widget.hide())
@@ -1324,8 +1322,7 @@ class MainWindow(QMainWindow):
             self._sidebar_anim.start()
             self._main_area_anim.start()
             self._sidebar_open = False
-            self._toggle_row.setText(f"{self._project_name}  >>")
-            self._toggle_row.adjustSize()
+            self._toggle_row.setText("❯❯")
             self._toggle_row.move(w - self._toggle_row.width() - 16, 12)
             self._toggle_row.raise_()
         else:
@@ -1335,7 +1332,6 @@ class MainWindow(QMainWindow):
                     self._sidebar_anim.finished.disconnect()
                 except Exception:
                     pass
-            # Slide sidebar in, shrink main area
             self._sidebar_widget.setGeometry(w, 0, SIDEBAR_WIDTH, h)
             self._sidebar_widget.show()
             self._sidebar_anim.setStartValue(QRect(w, 0, SIDEBAR_WIDTH, h))
@@ -1346,8 +1342,7 @@ class MainWindow(QMainWindow):
             self._sidebar_anim.start()
             self._main_area_anim.start()
             self._sidebar_open = True
-            self._toggle_row.setText(f"<<  {self._project_name}")
-            self._toggle_row.adjustSize()
+            self._toggle_row.setText("❮❮")
             self._toggle_row.move(w - SIDEBAR_WIDTH + 16, 12)
             self._toggle_row.raise_()
 
@@ -1373,15 +1368,13 @@ class MainWindow(QMainWindow):
         self._current_font = font_name
         fo = FONT_OPTIONS[font_name]
         self.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
-        # Update toggle row and close button to match selected font
+        # Refresh pill chevron stylesheet
         self._toggle_row.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none; "
-            f"color: {PALETTE['placeholder']}; font-family: '{fo['family']}'; "
-            f"font-size: {fo['size'] - 1}pt; padding: 0; }}"
-            f"QPushButton:hover {{ color: {PALETTE['text']}; }}"
+            f"QPushButton {{ background-color: {PALETTE['btn_bg']}; border: none; "
+            f"border-radius: 4px; color: {PALETTE['text']}; font-size: {BASE_FONT_SIZE - 1}pt; padding: 0; }}"
+            f"QPushButton:hover {{ background-color: {PALETTE['btn_hover']}; }}"
+            f"QPushButton:pressed {{ background-color: {PALETTE['btn_pressed']}; }}"
         )
-        self._toggle_row.adjustSize()
-        # Reposition toggle row after font/size change
         self._reposition_overlay_elements()
 
     def _apply_dark_mode(self, dark: bool):
