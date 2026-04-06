@@ -83,10 +83,31 @@ def autosave_path(project_name: str) -> str:
 
 def create_project(project_name: str) -> str | None:
     """Create a new .onward bundle. Returns error string or None on success."""
+    # Validate name
+    if not project_name or not project_name.strip():
+        return "Project name cannot be empty."
+    if len(project_name) > 100:
+        return "Project name must be 100 characters or fewer."
+    if any(c in project_name for c in r'/\:*?"<>|'):
+        return "Project name contains invalid characters."
+    if project_name.startswith('.') or project_name.endswith('.'):
+        return "Project name cannot start or end with a period."
+    if project_name != project_name.strip():
+        return "Project name cannot start or end with a space."
+    reserved = {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    }
+    if project_name.upper() in reserved:
+        return f'"{project_name}" is a reserved name on Windows and cannot be used.'
     bundle = project_bundle(project_name)
     if os.path.exists(bundle):
         return "A project with that name already exists."
-    os.makedirs(bundle)
+    try:
+        os.makedirs(bundle)
+    except OSError as e:
+        return f"Could not create project: {e}"
     return None
 
 
