@@ -1215,15 +1215,24 @@ class MainWindow(QMainWindow):
         self._btn_settings.clicked.connect(self._on_settings)
         self._btn_home.clicked.connect(self._on_home)
 
-        # Root layout — just the main area, sidebar overlays on top
+        # Root layout — empty, main area is positioned manually via geometry
         root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
-        root.addWidget(main_area)
+
+        # Position main area to fill full window initially
+        main_area.setGeometry(0, 0, self.width(), self.height())
 
         # Animation for sidebar slide
         self._sidebar_anim = QPropertyAnimation(self._sidebar_widget, b"geometry")
         self._sidebar_anim.setDuration(200)
         self._sidebar_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        # Animation for main area right margin shrinking/growing with sidebar
+        self._main_area_anim = QPropertyAnimation(main_area, b"geometry")
+        self._main_area_anim.setDuration(200)
+        self._main_area_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._main_area = main_area
+
         self._sidebar_open = False
 
     def resizeEvent(self, event):
@@ -1231,29 +1240,22 @@ class MainWindow(QMainWindow):
         self._reposition_overlay_elements()
 
     def _reposition_overlay_elements(self):
-        """Position sidebar and toggle row correctly."""
+        """Position sidebar, toggle row, and resize main area correctly."""
         h = self.centralWidget().height()
         w = self.centralWidget().width()
 
         if self._sidebar_open:
-            # Expanded: left-aligned at sidebar left edge + 16px
             self._toggle_row.adjustSize()
             self._toggle_row.move(w - SIDEBAR_WIDTH + 16, 12)
-        else:
-            # Collapsed: right-aligned, 16px from right edge
-            self._toggle_row.adjustSize()
-            self._toggle_row.move(w - self._toggle_row.width() - 16, 12)
-
-        self._toggle_row.raise_()
-
-        # Sidebar covers full height on right side
-        if self._sidebar_open:
+            self._main_area.setGeometry(0, 0, w - SIDEBAR_WIDTH, h)
             self._sidebar_widget.setGeometry(w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h)
         else:
+            self._toggle_row.adjustSize()
+            self._toggle_row.move(w - self._toggle_row.width() - 16, 12)
+            self._main_area.setGeometry(0, 0, w, h)
             self._sidebar_widget.setGeometry(w, 0, SIDEBAR_WIDTH, h)
-        self._sidebar_widget.raise_()
 
-        # Toggle row is always the top layer
+        self._sidebar_widget.raise_()
         self._toggle_row.raise_()
 
     def _toggle_sidebar(self):
@@ -1266,10 +1268,14 @@ class MainWindow(QMainWindow):
                     self._sidebar_anim.finished.disconnect()
                 except Exception:
                     pass
+            # Slide sidebar out, expand main area
             self._sidebar_anim.setStartValue(QRect(w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h))
             self._sidebar_anim.setEndValue(QRect(w, 0, SIDEBAR_WIDTH, h))
             self._sidebar_anim.finished.connect(lambda: self._sidebar_widget.hide())
+            self._main_area_anim.setStartValue(QRect(0, 0, w - SIDEBAR_WIDTH, h))
+            self._main_area_anim.setEndValue(QRect(0, 0, w, h))
             self._sidebar_anim.start()
+            self._main_area_anim.start()
             self._sidebar_open = False
             self._toggle_row.setText(f"{self._project_name}  >>")
             self._toggle_row.adjustSize()
@@ -1282,12 +1288,16 @@ class MainWindow(QMainWindow):
                     self._sidebar_anim.finished.disconnect()
                 except Exception:
                     pass
+            # Slide sidebar in, shrink main area
             self._sidebar_widget.setGeometry(w, 0, SIDEBAR_WIDTH, h)
             self._sidebar_widget.show()
             self._sidebar_anim.setStartValue(QRect(w, 0, SIDEBAR_WIDTH, h))
             self._sidebar_anim.setEndValue(QRect(w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, h))
             self._sidebar_anim.finished.connect(lambda: self._toggle_row.raise_())
+            self._main_area_anim.setStartValue(QRect(0, 0, w, h))
+            self._main_area_anim.setEndValue(QRect(0, 0, w - SIDEBAR_WIDTH, h))
             self._sidebar_anim.start()
+            self._main_area_anim.start()
             self._sidebar_open = True
             self._toggle_row.setText(f"<<  {self._project_name}")
             self._toggle_row.adjustSize()
