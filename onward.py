@@ -614,9 +614,10 @@ class AddSummaryDialog(QDialog):
         super().__init__(parent)
         self.entry   = entry
         self.summary = ""
+        self._closing = False
         self.setWindowTitle("Add Summary")
         self.setMinimumSize(460, 260)
-        self.setModal(True)
+        self.setModal(False)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -667,8 +668,13 @@ class AddSummaryDialog(QDialog):
         return msg.exec() == QMessageBox.Yes
 
     def closeEvent(self, event):
-        if self._confirm_cancel():
+        if self._closing:
             event.accept()
+            return
+        if self._confirm_cancel():
+            self._closing = True
+            event.ignore()  # Let reject() handle the close
+            self.reject()
         else:
             event.ignore()
 
@@ -1439,14 +1445,35 @@ class MainWindow(QMainWindow):
             self._show_toast("You have to write something first! :P")
             return
 
+        # Make editor read-only while summary dialog is open so user can
+        # scroll and reference their entry but not accidentally edit it
+        self._editor.setReadOnly(True)
+
+        # Disable sidebar buttons so user can't interact with them
+        # while the non-modal summary dialog is open
+        for btn in [self._btn_submit, self._btn_view, self._btn_export,
+                    self._btn_feedback, self._btn_settings, self._btn_home]:
+            btn.setEnabled(False)
+
         dlg = AddSummaryDialog(entry, self)
         self._apply_dialog_style(dlg)
-        if dlg.exec() == QDialog.Accepted:
+
+        def on_finished():
+            self._editor.setReadOnly(False)
+            for btn in [self._btn_submit, self._btn_view, self._btn_export,
+                        self._btn_feedback, self._btn_settings, self._btn_home]:
+                btn.setEnabled(True)
+
+        def on_accepted():
             submit_entry(self._project_name, entry, dlg.summary)
             self._editor.clear()
             self._unsaved = False
             self._refresh_sidebar()
             self._show_toast("Successfully submitted! ^_^")
+
+        dlg.accepted.connect(on_accepted)
+        dlg.finished.connect(on_finished)
+        dlg.show()
 
     def _on_view_summary(self):
         dlg = SummaryDialog(self._project_name, self)

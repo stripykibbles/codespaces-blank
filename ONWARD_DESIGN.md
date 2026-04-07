@@ -80,7 +80,9 @@ This decision may be revisited in the future if users request it. If rich text i
 ## Save & Submit Flow
 
 - Writing lives in the editor until the user clicks **Submit & Clear**
+- On Submit, a non-modal summary dialog appears — the editor becomes read-only but remains visible and scrollable so the user can reference what they wrote while composing their summary
 - On Submit, the entry is written to `[projectname].csv` and the editor is cleared
+- The summary dialog can be dismissed via Cancel, the X button, or Submit
 - `autosave.tmp` is written to disk periodically during a session (e.g. every few minutes) for crash recovery only
 - On clean Submit or clean exit, `autosave.tmp` is deleted
 - On next launch, if `autosave.tmp` exists, the app offers to recover the unsaved entry
@@ -175,8 +177,6 @@ Export CSV is distinct from the internal `.onward` format. It is a portable, hum
 **Recent projects on the launch screen** — A short list of recently opened projects would reduce friction for daily users who work on one project consistently. The data is already on disk; it just needs tracking in `settings.json`.
 
 **Keyboard shortcuts** — A writing app should be fully keyboard-accessible. Submit, toggle sidebar, and Home at minimum. Qt's `QShortcut` makes this straightforward.
-
-**Summary dialog showing the entry** — Currently the user is asked to write a summary after submitting, but the entry they just wrote is no longer visible. A small scrollable preview of the entry inside the summary dialog would help users write better summaries without relying on short-term memory.
 
 **Submit without summary (keyboard shortcut)** — A shortcut to submit with no summary, bypassing the dialog entirely, would reduce friction for power users writing daily. The "or not — that's okay, too!" copy in the dialog already acknowledges this friction.
 
