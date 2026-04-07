@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QSizePolicy, QFrame, QScrollArea, QMessageBox, QLineEdit, QCheckBox,
     QRadioButton, QButtonGroup
 )
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve, QUrl
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve, QUrl, QEvent
 from PySide6.QtGui import QFontDatabase, QCloseEvent, QPainter, QColor, QPainterPath, QDesktopServices
 
 
@@ -1141,6 +1141,7 @@ class MainWindow(QMainWindow):
         apply_font_size(self._font_size)
         self._unsaved = False
         self._going_home = False
+        self._summary_dlg = None
         # Start sidebar open on first ever launch so users discover Submit & Clear
         self._start_open = not settings.get("sidebar_introduced", False)
         if self._start_open:
@@ -1352,9 +1353,19 @@ class MainWindow(QMainWindow):
             self._toggle_row.move(w - SIDEBAR_WIDTH + 16, 12)
             self._toggle_row.raise_()
 
+    def eventFilter(self, obj, event):
+        """Re-raise summary dialog when user clicks anywhere in the app."""
+        if self._summary_dlg is not None and event.type() == QEvent.Type.MouseButtonPress:
+            is_dialog = obj is self._summary_dlg
+            is_child = isinstance(obj, QWidget) and self._summary_dlg.isAncestorOf(obj)
+            if not is_dialog and not is_child:
+                self._summary_dlg.raise_()
+                self._summary_dlg.activateWindow()
+        return False  # Never consume the event — let it propagate normally
+
     def mousePressEvent(self, event):
         """Close sidebar when clicking outside it."""
-        if self._sidebar_open:
+        if self._summary_dlg is None and self._sidebar_open:
             sidebar_rect = self._sidebar_widget.geometry()
             if not sidebar_rect.contains(event.position().toPoint()):
                 self._toggle_sidebar()
@@ -1455,14 +1466,24 @@ class MainWindow(QMainWindow):
                     self._btn_feedback, self._btn_settings, self._btn_home]:
             btn.setEnabled(False)
 
+        # Change Submit button text to signal submission is in progress
+        self._btn_submit.setText("Submitting...")
+
         dlg = AddSummaryDialog(entry, self)
         self._apply_dialog_style(dlg)
+        self._summary_dlg = dlg  # keep reference so event filter can re-raise it
+
+        # Install app-level event filter to catch all clicks and re-raise dialog
+        QApplication.instance().installEventFilter(self)
 
         def on_finished():
             self._editor.setReadOnly(False)
             for btn in [self._btn_submit, self._btn_view, self._btn_export,
                         self._btn_feedback, self._btn_settings, self._btn_home]:
                 btn.setEnabled(True)
+            self._btn_submit.setText("Submit && Clear")
+            self._summary_dlg = None
+            QApplication.instance().removeEventFilter(self)
 
         def on_accepted():
             submit_entry(self._project_name, entry, dlg.summary)
