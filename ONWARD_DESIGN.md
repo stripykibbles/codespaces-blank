@@ -183,3 +183,7 @@ Export CSV is distinct from the internal `.onward` format. It is a portable, hum
 **Accent colour** — Everything is intentionally neutral grey, which suits the writing-first aesthetic. A single accent colour used very sparingly — perhaps just the Submit button — could add life and visually prioritise the most important action without compromising the minimalist feel. Worth revisiting.
 
 **Live word count** — A session word count visible in the editor as you type has been considered and deliberately set aside. The concern is that it encourages writers to think about their work quantitatively rather than qualitatively. Fifty hard-won words that unlock a story are worth more than five hundred easy ones, and a visible counter might make a productive session feel like a failure. If this is ever added, it should be a toggleable option in Settings, off by default.
+
+**About screen** — An About button in the sidebar would give the app a sense of completeness. It could show the app name, version number, a one-line description, and the philosophy behind Onward. Professional apps have About screens, and it's a natural place to surface the "write forward, don't look back" idea for curious users.
+
+**GitHub README** — A repo-level README explaining what Onward is, why it exists, how to download and run it, and a screenshot. Worth doing before any public release or sharing. The About screen copy would provide a good head start.
