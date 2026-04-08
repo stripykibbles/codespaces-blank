@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QRadioButton, QButtonGroup
 )
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve, QUrl, QEvent
-from PySide6.QtGui import QFontDatabase, QCloseEvent, QPainter, QColor, QPainterPath, QDesktopServices
+from PySide6.QtGui import QFontDatabase, QCloseEvent, QPainter, QColor, QPainterPath, QDesktopServices, QShortcut, QKeySequence
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -73,6 +73,21 @@ SIDEBAR_WIDTH = 240
 WINDOW_MIN_W  = 860
 WINDOW_MIN_H  = 580
 BTN_SPACING   = 8  # Consistent spacing between buttons — used on launch screen and sidebar
+
+# ── Easter egg / QA test content ─────────────────────────────────────────────
+# Frankenstein, Chapter 5 — Mary Shelley (public domain)
+# Cmd+Shift+F pastes one paragraph at a time into the editor for QA testing.
+_FRANKENSTEIN_PARAGRAPHS = [
+    "It was on a dreary night of November that I beheld the accomplishment of my toils. With an anxiety that almost amounted to agony, I collected the instruments of life around me, that I might infuse a spark of being into the lifeless thing that lay at my feet. It was already one in the morning; the rain pattered dismally against the panes, and my candle was nearly burnt out, when, by the glimmer of the half-extinguished light, I saw the dull yellow eye of the creature open; it breathed hard, and a convulsive motion agitated its limbs.",
+    "How can I describe my emotions at this catastrophe, or how delineate the wretch whom with such infinite pains and care I had endeavoured to form? His limbs were in proportion, and I had selected his features as beautiful. Beautiful! Great God! His yellow skin scarcely covered the work of muscles and arteries beneath; his hair was of a lustrous black, and flowing; his teeth of a pearly whiteness; but these luxuriances only formed a more horrid contrast with his watery eyes, that seemed almost of the same colour as the dun-white sockets in which they were set, his shrivelled complexion and straight black lips.",
+    "The different accidents of life are not so changeable as the feelings of human nature. I had worked hard for nearly two years, for the sole purpose of infusing life into an inanimate body. For this I had deprived myself of rest and health. I had desired it with an ardour that far exceeded moderation; but now that I had finished, the beauty of the dream vanished, and breathless horror and disgust filled my heart. Unable to endure the aspect of the being I had created, I rushed out of the room and continued a long time traversing my bed-chamber, unable to compose my mind to sleep. At length lassitude succeeded to the tumult I had before endured, and I threw myself on the bed in my clothes, endeavouring to seek a few moments of forgetfulness. But it was in vain; I slept, indeed, but I was disturbed by the wildest dreams. I thought I saw Elizabeth, in the bloom of health, walking in the streets of Ingolstadt. Delighted and surprised, I embraced her, but as I imprinted the first kiss on her lips, they became livid with the hue of death; her features appeared to change, and I thought that I held the corpse of my dead mother in my arms; a shroud enveloped her form, and I saw the grave-worms crawling in the folds of the flannel. I started from my sleep with horror; a cold dew covered my forehead, my teeth chattered, and every limb became convulsed; when, by the dim and yellow light of the moon, as it forced its way through the window shutters, I beheld the wretch—the miserable monster whom I had created. He held up the curtain of the bed; and his eyes, if eyes they may be called, were fixed on me. His jaws opened, and he muttered some inarticulate sounds, while a grin wrinkled his cheeks. He might have spoken, but I did not hear; one hand was stretched out, seemingly to detain me, but I escaped and rushed downstairs. I took refuge in the courtyard belonging to the house which I inhabited, where I remained during the rest of the night, walking up and down in the greatest agitation, listening attentively, catching and fearing each sound as if it were to announce the approach of the demoniacal corpse to which I had so miserably given life.",
+    "Oh! No mortal could support the horror of that countenance. A mummy again endued with animation could not be so hideous as that wretch. I had gazed on him while unfinished; he was ugly then, but when those muscles and joints were rendered capable of motion, it became a thing such as even Dante could not have conceived.",
+    "I passed the night wretchedly. Sometimes my pulse beat so quickly and hardly that I felt the palpitation of every artery; at others, I nearly sank to the ground through languor and extreme weakness. Mingled with this horror, I felt the bitterness of disappointment; dreams that had been my food and pleasant rest for so long a space were now become a hell to me; and the change was so rapid, the overthrow so complete!",
+    "Morning, dismal and wet, at length dawned and discovered to my sleepless and aching eyes the church of Ingolstadt, its white steeple and clock, which indicated the sixth hour. The porter opened the gates of the court, which had that night been my asylum, and I issued into the streets, pacing them with quick steps, as if I sought to avoid the wretch whom I feared every turning of the street would present to my view. I did not dare return to the apartment which I inhabited, but felt impelled to hurry on, although drenched by the rain which poured from a black and comfortless sky.",
+    "I continued walking in this manner for some time, endeavouring by bodily exercise to ease the load that weighed upon my mind. I traversed the streets without any clear conception of where I was or what I was doing. My heart palpitated in the sickness of fear, and I hurried on with irregular steps, not daring to look about me.",
+    "Continuing thus, I came at length opposite to the inn at which the various diligences and carriages usually stopped. Here I paused, I knew not why; but I remained some minutes with my eyes fixed on a coach that was coming towards me from the other end of the street. As it drew nearer I observed that it was the Swiss diligence; it stopped just where I was standing, and on the door being opened, I perceived Henry Clerval, who, on seeing me, instantly sprung out. \"My dear Frankenstein,\" exclaimed he, \"how glad I am to see you! How fortunate that you should be here at the very moment of my alighting!\"",
+]
+_frankenstein_index = 0
 
 
 # ── Project path helpers ──────────────────────────────────────────────────────
@@ -654,6 +669,22 @@ class AddSummaryDialog(QDialog):
         btn_row.addWidget(cancel_btn)
         btn_row.addWidget(submit_btn)
         layout.addLayout(btn_row)
+
+        # Easter egg / QA shortcut: Cmd+Shift+F pastes next Frankenstein paragraph
+        frankenstein_shortcut = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
+        frankenstein_shortcut.activated.connect(self._paste_frankenstein)
+
+    def _paste_frankenstein(self):
+        """Easter egg / QA: paste next paragraph of Frankenstein into summary field."""
+        global _frankenstein_index
+        paragraph = _FRANKENSTEIN_PARAGRAPHS[_frankenstein_index]
+        _frankenstein_index = (_frankenstein_index + 1) % len(_FRANKENSTEIN_PARAGRAPHS)
+        current = self.text_edit.toPlainText()
+        separator = "\n\n" if current.strip() else ""
+        self.text_edit.setPlainText(current + separator + paragraph)
+        cursor = self.text_edit.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.text_edit.setTextCursor(cursor)
 
     def _confirm_cancel(self) -> bool:
         """Ask for confirmation if the user has typed a summary."""
@@ -1278,6 +1309,10 @@ class MainWindow(QMainWindow):
         main_area.setGeometry(0, 0, self.width(), self.height())
 
         # Animation for sidebar slide
+        # Easter egg / QA shortcut: Cmd+Shift+F pastes next Frankenstein paragraph
+        frankenstein_shortcut = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
+        frankenstein_shortcut.activated.connect(self._paste_frankenstein)
+
         self._sidebar_anim = QPropertyAnimation(self._sidebar_widget, b"geometry")
         self._sidebar_anim.setDuration(200)
         self._sidebar_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -1559,6 +1594,19 @@ class MainWindow(QMainWindow):
     def _apply_dialog_style(self, dlg: QDialog):
         fo = FONT_OPTIONS[self._current_font]
         dlg.setStyleSheet(base_stylesheet(fo["family"], fo["size"]))
+
+    def _paste_frankenstein(self):
+        """Easter egg / QA: paste next paragraph of Frankenstein Ch. 5 into editor."""
+        global _frankenstein_index
+        paragraph = _FRANKENSTEIN_PARAGRAPHS[_frankenstein_index]
+        _frankenstein_index = (_frankenstein_index + 1) % len(_FRANKENSTEIN_PARAGRAPHS)
+        current = self._editor.toPlainText()
+        separator = "\n\n" if current.strip() else ""
+        self._editor.setPlainText(current + separator + paragraph)
+        # Move cursor to end
+        cursor = self._editor.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self._editor.setTextCursor(cursor)
 
     def _show_toast(self, message: str):
         fo = FONT_OPTIONS[self._current_font]
