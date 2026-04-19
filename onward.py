@@ -136,7 +136,7 @@ def create_project(project_name: str) -> str | None:
 
 def load_settings() -> dict:
     """Load global app settings from settings.json, returning defaults if missing."""
-    defaults = {"font": "Sans Serif", "dark_mode": False, "sidebar_introduced": False, "font_size": "Small"}
+    defaults = {"font": "Sans Serif", "dark_mode": False, "sidebar_introduced": False, "font_size": "Small", "recent_projects": []}
     try:
         with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -148,9 +148,29 @@ def load_settings() -> dict:
                 data["sidebar_introduced"] = defaults["sidebar_introduced"]
             if data.get("font_size") not in FONT_SIZE_OPTIONS:
                 data["font_size"] = defaults["font_size"]
+            if "recent_projects" not in data:
+                data["recent_projects"] = defaults["recent_projects"]
+            # Validate paths — drop any that no longer exist
+            data["recent_projects"] = [
+                p for p in data["recent_projects"]
+                if os.path.exists(p.get("path", ""))
+            ]
             return data
     except Exception:
         return defaults
+
+
+def add_recent_project(project_name: str):
+    """Prepend project to recent_projects list in settings, keeping max 5."""
+    settings = load_settings()
+    recent = settings.get("recent_projects", [])
+    bundle = project_bundle(project_name)
+    # Remove existing entry for this project if present
+    recent = [p for p in recent if p.get("name") != project_name]
+    # Prepend and trim to 5
+    recent.insert(0, {"name": project_name, "path": bundle})
+    settings["recent_projects"] = recent[:5]
+    save_settings(settings)
 
 
 def save_settings(settings: dict):
@@ -468,6 +488,26 @@ def launch_stylesheet(font_family: str, font_size: int) -> str:
     }}
     QPushButton.launch-btn:hover   {{ background-color: {p['btn_hover']}; }}
     QPushButton.launch-btn:pressed {{ background-color: {p['btn_pressed']}; }}
+    QWidget#slideBtn {{
+        background-color: {p['btn_bg']};
+        border-radius: 4px;
+    }}
+    QWidget#slideBtn:hover {{
+        background-color: {p['btn_hover']};
+    }}
+    QLabel.launch-btn-label {{
+        background: transparent;
+        color: {p['text']};
+        font-family: "{font_family}";
+        font-size: {font_size - 1}pt;
+    }}
+    QLabel.launch-btn-label-secondary {{
+        background: transparent;
+        color: {p['placeholder']};
+        font-family: "{font_family}";
+        font-size: {font_size - 1}pt;
+        font-style: italic;
+    }}
     QLabel.dialog-body {{
         color: {p['text']};
         font-family: "{font_family}";
@@ -1012,19 +1052,74 @@ class RoundedCard(QWidget):
 
 
 
+class FadeButton(QWidget):
+    """Button-like widget where labels cross-fade on hover."""
+    from PySide6.QtCore import Signal
+    clicked = Signal()
+
+    def __init__(self, primary_text: str, secondary_text: str, parent=None):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QGraphicsOpacityEffect
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        # Primary label — visible at rest
+        self._primary = QLabel(primary_text, self)
+        self._primary.setAlignment(Qt.AlignCenter)
+        self._primary.setProperty("class", "launch-btn-label")
+        self._primary_effect = QGraphicsOpacityEffect(self._primary)
+        self._primary_effect.setOpacity(1.0)
+        self._primary.setGraphicsEffect(self._primary_effect)
+
+        # Secondary label — visible on hover
+        self._secondary = QLabel(secondary_text, self)
+        self._secondary.setAlignment(Qt.AlignCenter)
+        self._secondary.setProperty("class", "launch-btn-label-secondary")
+        self._secondary_effect = QGraphicsOpacityEffect(self._secondary)
+        self._secondary_effect.setOpacity(0.0)
+        self._secondary.setGraphicsEffect(self._secondary_effect)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        w = self.width()
+        h = self.height()
+        self._primary.setGeometry(0, 0, w, h)
+        self._secondary.setGeometry(0, 0, w, h)
+
+    def enterEvent(self, event):
+        self._primary_effect.setOpacity(0.0)
+        self._secondary_effect.setOpacity(1.0)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._primary_effect.setOpacity(1.0)
+        self._secondary_effect.setOpacity(0.0)
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
 class LaunchWindow(QMainWindow):
     """New Project / Open Project screen shown on every launch."""
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Onward")
-        self.setMinimumWidth(420)
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
+        self.setMinimumWidth(480)
         self._chosen_project = None
 
         central = QWidget()
         central.setObjectName("launchWidget")
         self.setCentralWidget(central)
+
+        settings = load_settings()
+        apply_palette(settings.get("dark_mode", False))
+        apply_font_size(settings.get("font_size", "Small"))
+        fo = FONT_OPTIONS[settings.get("font", "Sans Serif")]
+        recent = settings.get("recent_projects", [])
+        last_project = recent[0] if recent else None
 
         layout = QVBoxLayout(central)
         layout.setContentsMargins(40, 36, 40, 36)
@@ -1040,6 +1135,21 @@ class LaunchWindow(QMainWindow):
         new_btn.clicked.connect(self._on_new_project)
         layout.addWidget(new_btn, alignment=Qt.AlignHCenter)
 
+        if last_project:
+            last_wrap = QWidget()
+            last_wrap.setObjectName("slideBtn")
+            last_wrap.setAttribute(Qt.WA_StyledBackground, True)
+            last_wrap.setFixedSize(SIDEBAR_WIDTH + 20, 34)
+            last_wrap_layout = QVBoxLayout(last_wrap)
+            last_wrap_layout.setContentsMargins(0, 0, 0, 0)
+
+            fade_btn = FadeButton("Open Last Project", last_project["name"], last_wrap)
+            fade_btn.setFixedSize(SIDEBAR_WIDTH + 20, 34)
+            fade_btn.clicked.connect(lambda: self._on_recent_project(last_project))
+            last_wrap_layout.addWidget(fade_btn)
+
+            layout.addWidget(last_wrap, alignment=Qt.AlignHCenter)
+
         open_btn = self._launch_button("Open Project")
         open_btn.clicked.connect(self._on_open_project)
         layout.addWidget(open_btn, alignment=Qt.AlignHCenter)
@@ -1048,17 +1158,17 @@ class LaunchWindow(QMainWindow):
         import_btn.clicked.connect(self._on_import)
         layout.addWidget(import_btn, alignment=Qt.AlignHCenter)
 
-        settings = load_settings()
-        apply_palette(settings.get("dark_mode", False))
-        apply_font_size(settings.get("font_size", "Medium"))
-        fo = FONT_OPTIONS[settings.get("font", "Sans Serif")]
         self.setStyleSheet(launch_stylesheet(fo["family"], fo["size"]))
+
+    def _on_recent_project(self, proj: dict):
+        self._chosen_project = proj["name"]
+        self._open_main_window()
 
     def _launch_button(self, text: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setProperty("class", "launch-btn")
         btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        btn.setFixedWidth(SIDEBAR_WIDTH - 32)
+        btn.setFixedWidth(SIDEBAR_WIDTH + 20)
         btn.setFlat(True)
         return btn
 
@@ -1148,6 +1258,7 @@ class LaunchWindow(QMainWindow):
             self._open_main_window(preload_text=txt_content)
 
     def _open_main_window(self, preload_text: str | None = None):
+        add_recent_project(self._chosen_project)
         self._main = MainWindow(self._chosen_project, preload_text=preload_text)
         self._main.resize(1000, 680)
         self._main.show()
@@ -1564,11 +1675,11 @@ class MainWindow(QMainWindow):
             self._apply_font(dlg.chosen_font)
             self._apply_dark_mode(dlg.chosen_dark)
             self._apply_font_size(dlg.chosen_size)
-            save_settings({
-                "font": dlg.chosen_font,
-                "dark_mode": dlg.chosen_dark,
-                "font_size": dlg.chosen_size,
-            })
+            settings = load_settings()
+            settings["font"] = dlg.chosen_font
+            settings["dark_mode"] = dlg.chosen_dark
+            settings["font_size"] = dlg.chosen_size
+            save_settings(settings)
         # On Cancel, _on_cancel() already reverts font/dark mode/size in memory.
         # We intentionally do not save on cancel — the reverted state is correct
         # for the current session and will be re-read from disk on next launch.

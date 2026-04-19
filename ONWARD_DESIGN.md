@@ -92,6 +92,8 @@ This decision may be revisited in the future if users request it. If rich text i
 ## First Launch & Project Management
 
 - On first launch and all subsequent launches, the app shows a screen with three options: **New Project**, **Open Project**, and **Import**
+- Once at least one project has been opened or created, a fourth button appears at the top: **Open Last Project** — hovering reveals the project name via opacity swap (the generic label fades to 0% and the project name appears at full opacity). The generic label protects users from feeling taunted by unfinished work; the hover reveal lets them confirm which project they're about to open.
+- Recent projects are tracked in `settings.json` under `recent_projects` (up to 5, path-validated on load). Currently only the most recent is surfaced in the UI, but the data structure supports showing more in the future if needed.
 - **New Project** — opens a dialog prompting the user to enter a project name, then creates a new `.onward` bundle and opens the main writing window.
 - **Open Project** uses a platform-specific file picker — on Mac, the native picker is used with an `*.onward` filter (enabled by file type registration); on Windows, a directory picker is used since `.onward` bundles are folders. In both cases the user navigates to and selects a `.onward` bundle.
 - **Import** — see Import section below.
@@ -173,8 +175,6 @@ Export CSV is distinct from the internal `.onward` format. It is a portable, hum
 **Project renaming** — Renaming a project from within the app would require renaming the `.onward` bundle on disk, updating any open file handles, and updating the window title and toggle row. Doable but non-trivial.
 
 **AI-generated summaries** — Users could optionally have summaries generated automatically by AI rather than writing them manually. Tabled for the long term.
-
-**Recent projects on the launch screen** — A short list of recently opened projects would reduce friction for daily users who work on one project consistently. The data is already on disk; it just needs tracking in `settings.json`.
 
 **Keyboard shortcuts** — A writing app should be fully keyboard-accessible. Submit, toggle sidebar, and Home at minimum. Qt's `QShortcut` makes this straightforward.
 
