@@ -58,6 +58,8 @@ User preferences are saved globally to `~/Documents/Onward/settings.json` and ap
 
 All settings support live preview — changes are applied immediately and reverted if the user cancels.
 
+`settings.json` uses a merge-on-write strategy — saving any subset of settings preserves all other keys. This ensures that settings added by different parts of the app (e.g. `recent_projects` added by the launch screen) are never accidentally overwritten.
+
 ---
 
 ## Plain Text
@@ -80,9 +82,10 @@ This decision may be revisited in the future if users request it. If rich text i
 ## Save & Submit Flow
 
 - Writing lives in the editor until the user clicks **Submit & Clear**
-- On Submit, a non-modal summary dialog appears — the editor becomes read-only but remains visible and scrollable so the user can reference what they wrote while composing their summary
+- On Submit, the editor becomes read-only and a modal summary dialog appears — the editor remains visible behind it
+- The summary dialog contains a text input for notes, a character count, and Cancel and Submit buttons
 - On Submit, the entry is written to `[projectname].csv` and the editor is cleared
-- The summary dialog can be dismissed via Cancel, the X button, or Submit
+- The summary dialog can be dismissed via Cancel or Submit (there is no X button — it is a modal dialog)
 - `autosave.tmp` is written to disk periodically during a session (e.g. every few minutes) for crash recovery only
 - On clean Submit or clean exit, `autosave.tmp` is deleted
 - On next launch, if `autosave.tmp` exists, the app offers to recover the unsaved entry
@@ -92,11 +95,19 @@ This decision may be revisited in the future if users request it. If rich text i
 ## First Launch & Project Management
 
 - On first launch and all subsequent launches, the app shows a screen with three options: **New Project**, **Open Project**, and **Import**
-- Once at least one project has been opened or created, a fourth button appears at the top: **Open Last Project** — hovering reveals the project name via opacity swap (the generic label fades to 0% and the project name appears at full opacity). The generic label protects users from feeling taunted by unfinished work; the hover reveal lets them confirm which project they're about to open.
-- Recent projects are tracked in `settings.json` under `recent_projects` (up to 5, path-validated on load). Currently only the most recent is surfaced in the UI, but the data structure supports showing more in the future if needed.
 - **New Project** — opens a dialog prompting the user to enter a project name, then creates a new `.onward` bundle and opens the main writing window.
 - **Open Project** uses a platform-specific file picker — on Mac, the native picker is used with an `*.onward` filter (enabled by file type registration); on Windows, a directory picker is used since `.onward` bundles are folders. In both cases the user navigates to and selects a `.onward` bundle.
 - **Import** — see Import section below.
+
+### Recent Projects
+
+The launch screen shows up to 5 recently opened projects alongside the three primary buttons. On first launch (no recent projects), the buttons are centered as usual. On subsequent launches, the buttons shift left, a vertical divider appears, and the recent projects list appears on the right as a secondary column.
+
+- Recent projects are stored in `settings.json` under a `recent_projects` key — a list of up to 5 dicts, each with `name` and `path`
+- Every time a project is opened, created, or imported, it is prepended to the list and the list is trimmed to 5
+- On load, each path is validated against disk — stale entries (moved or deleted projects) are silently dropped
+- Project names in the list are truncated with `...` using font-aware metrics, so the truncation point respects the user's chosen font and size
+- The full name is available as a tooltip on hover
 
 ---
 
@@ -149,6 +160,24 @@ Two distinct export actions, both producing standalone files the user saves wher
 | Export CSV | `[projectname]-[timestamp].csv` | Full raw data export including entries, timestamps, word counts, and summaries — for backup or migration |
 
 Export CSV is distinct from the internal `.onward` format. It is a portable, human-readable snapshot of all project data.
+
+---
+
+## Stylesheets
+
+All styling flows through two functions:
+
+- **`base_stylesheet(font_family, font_size)`** — the single source of truth for all shared styles: the main window, editor, sidebar buttons, dialogs, inputs, scrollbars, and the `muted` label style.
+- **`launch_stylesheet(font_family, font_size)`** — calls `base_stylesheet` and appends the four launch-specific rules: `launchWidget` background, `launchTitle`, `launch-btn`, and `recent-btn`.
+
+This consolidation means any shared style change (e.g. dialog button padding) has exactly one place to be made.
+
+---
+
+## Easter Eggs
+
+### Frankenstein (Cmd+Shift+F)
+Pastes the next paragraph of Mary Shelley's *Frankenstein* (Chapter 5, public domain) into the editor. Cycles through paragraphs on repeated presses. Primarily a QA tool for testing Submit & Export with realistic content.
 
 ---
 
